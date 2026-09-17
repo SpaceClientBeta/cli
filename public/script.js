@@ -1294,11 +1294,11 @@ function downloadClient(){
   // Прямая ссылка на EXE в Cloudflare Worker, без промежуточного скачивания с сайта.
   const DIRECT_EXE_URL = String(window.SPACECLIENT_DOWNLOAD_URL || '').trim();
   if (!/^https?:\/\//i.test(DIRECT_EXE_URL)) {
-    toastMsg('Ссылка на скачивание EXE не настроена.');
+    toastMsg('Ссылка на скачивание EXE не настроена (public/download-config.js).');
     return;
   }
   a.href = DIRECT_EXE_URL;
-  a.download='SpaceClient.exe';
+  a.download = String(window.SPACECLIENT_DOWNLOAD_FILENAME || 'spaceclient_setup.exe');
   a.rel='noopener';
   document.body.appendChild(a); a.click(); a.remove();
   toastMsg(tr('Space Client скачивается.'));

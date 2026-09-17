@@ -438,7 +438,7 @@
   </div>
   <button id="ambientToggle" class="ambient-toggle" type="button" aria-label="Открыть управление музыкой" title="Музыка" aria-pressed="false">♫</button>
   <div id="ambientStatus" class="ambient-status" role="status" aria-live="polite"></div>
-  <script src="download-config.js?v=1"></script>
+  <script src="download-config.js?v=2"></script>
 <script src="script.js?v=18.10"></script>
 <script src="launcher-bridge.js?v=1"></script>
 <script>
@@ -457,34 +457,6 @@
 })();
 </script>
 
-<script>
-(() => {
-  const params = new URLSearchParams(location.search);
-  if (params.get('launcher') !== '1') return;
-  const callback = params.get('callback') || '';
-  const nonce = params.get('nonce') || '';
-  let sent = false;
-  async function handoff() {
-    if (sent || !callback || !nonce) return;
-    const token = localStorage.getItem('space_token');
-    if (!token) return;
-    sent = true;
-    try {
-      const r = await fetch((window.SPACECLIENT_API_BASE || '') + '/api/launcher/authorize', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({callback,nonce})});
-      const data = await r.json();
-      if (!r.ok || !data.redirect) throw new Error(data.message || 'Не удалось передать вход в лаунчер.');
-      location.href = data.redirect;
-    } catch (e) {
-      sent = false;
-      const msg = document.querySelector('#authError, .auth-error');
-      if (msg) msg.textContent = e.message;
-      if (typeof toastMsg === 'function') toastMsg(e.message);
-    }
-  }
-  const timer = setInterval(handoff, 500);
-  handoff();
-  window.addEventListener('beforeunload', () => clearInterval(timer));
-})();
-</script>
+<!-- Обработка входа из лаунчера живёт в launcher-bridge.js (один раз). Дубль удалён: две копии слали два тикета. -->
 </body>
 </html>
