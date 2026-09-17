@@ -1,10 +1,17 @@
 name = "spaceclient-site"
 compatibility_date = "2026-09-17"
+compatibility_flags = ["nodejs_compat"]
+
+# worker.js implements the /api/* backend (accounts, admin panel, friends,
+# password reset, etc.) using Supabase, so it can run entirely on Cloudflare.
+main = "worker.js"
 
 # Only the contents of ./public are deployed as static assets.
-# This keeps node_modules, server.js and package.json (used only for
-# the separate Node.js API backend) out of the Cloudflare deploy,
-# which is what was causing the "Asset too large" / workerd error.
+# This keeps node_modules, server.js and package.json out of the deploy,
+# which is what caused the earlier "Asset too large" / workerd error.
+# The "binding" name (ASSETS) is how worker.js reaches these files via
+# env.ASSETS.fetch(...) for anything the Worker itself doesn't handle.
 [assets]
 directory = "./public"
+binding = "ASSETS"
 not_found_handling = "single-page-application"

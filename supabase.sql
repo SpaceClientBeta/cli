@@ -251,3 +251,22 @@ create table if not exists public.launcher_tickets (
 create index if not exists launcher_tickets_expires_idx on public.launcher_tickets(expires_at);
 alter table public.launcher_tickets enable row level security;
 revoke all on table public.launcher_tickets from anon, authenticated;
+
+-- Password-reset codes and resend cooldowns.
+-- The Cloudflare Worker (worker.js) has no long-lived in-memory process like
+-- the old Node server did, so this state now lives in Supabase instead of a
+-- JS Map. One row per email holds both the active code and the cooldown.
+create table if not exists public.password_resets (
+  email text primary key,
+  code text,
+  code_expires_at timestamptz,
+  verified_token text,
+  verified_token_expires_at timestamptz,
+  next_allowed_at timestamptz,
+  next_delay_seconds integer not null default 60,
+  updated_at timestamptz not null default now()
+);
+alter table public.password_resets enable row level security;
+revoke all on table public.password_resets from anon, authenticated;
+comment on table public.password_resets is
+  'Password-reset codes/cooldowns. Accessed only by the Worker with the Supabase secret/service-role key.';

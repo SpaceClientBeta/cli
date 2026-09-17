@@ -1,0 +1,1313 @@
+// Space Client API — Cloudflare Worker
+//
+// This is server.js ported to run on Cloudflare Workers, so it can be
+// deployed together with the static site and use the "Variables and
+// secrets" / "Observability" / "Runtime" tabs in the dashboard.
+//
+// Differences from the old Node server.js (server.js is kept only for
+// reference / running the API elsewhere; Cloudflare uses this file):
+//   - Uses Web Crypto (crypto.subtle, crypto.getRandomValues) instead of
+//     Node's "crypto" module.
+//   - Uses the Fetch API (Request/Response) instead of Node's "http".
+//   - Static files are served by the [assets] binding (see wrangler.toml),
+//     not by reading the filesystem — Workers have no filesystem access.
+//   - Password-reset codes and resend cooldowns are stored in Supabase
+//     (table "password_resets") instead of an in-memory Map, because a
+//     Worker has no single long-lived process/memory to keep state in.
+//   - Email sending uses the Resend HTTP API (https://resend.com) instead
+//     of nodemailer/SMTP sockets, which Workers cannot use the way
+//     nodemailer expects. Set RESEND_API_KEY (and optionally MAIL_FROM) in
+//     "Variables and secrets" to enable password-reset emails. If you'd
+//     rather use a different provider (SendGrid, Mailgun, Brevo, etc.),
+//     only the sendResetCodeEmail() function below needs to change.
+//
+// Required environment variables (add them under Settings ->
+// Variables and secrets once this Worker is deployed with worker.js as
+// its main script):
+//   SUPABASE_URL
+//   SUPABASE_SECRET_KEY   (or SUPABASE_SERVICE_ROLE_KEY)
+//   ADMIN_NICK            (optional, defaults to "winzuxx")
+//   RESEND_API_KEY        (optional — needed only for password-reset email)
+//   MAIL_FROM             (optional, e.g. "Space Client <noreply@yourdomain.com>")
+
+import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
+
+// ---------- Web Crypto helpers (replace Node's "crypto" module) ----------
+
+function bufToHex(buf) {
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomHex(byteLength) {
+  const arr = new Uint8Array(byteLength);
+  crypto.getRandomValues(arr);
+  return bufToHex(arr.buffer);
+}
+
+async function sha256Hex(value) {
+  const data = new TextEncoder().encode(String(value || ''));
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return bufToHex(digest);
+}
+
+function token() {
+  return randomHex(32); // 64 hex chars, same shape as the old crypto.randomBytes(32).toString('hex')
+}
+
+function randomCode6() {
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return String(arr[0] % 1000000).padStart(6, '0');
+}
+
+// ---------- Small request/response helpers (replace Node's "http") ----------
+
+const ALLOWED_ORIGINS = new Set([
+  'https://spaceclientbeta.github.io',
+  'https://spaceclientbeta.layero.app',
+  'https://space-client.layero.app',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    return u.protocol === 'https:' && u.hostname.endsWith('.github.io');
+  } catch {
+    return false;
+  }
+}
+
+function corsHeaders(request) {
+  const origin = request.headers.get('Origin') || '';
+  const headers = new Headers({
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    Vary: 'Origin'
+  });
+  if (isAllowedOrigin(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+  return headers;
+}
+
+function json(request, status, body, extraHeaders) {
+  const headers = corsHeaders(request);
+  headers.set('Content-Type', 'application/json; charset=utf-8');
+  headers.set('Cache-Control', 'no-store');
+  if (extraHeaders) for (const [k, v] of Object.entries(extraHeaders)) headers.append(k, v);
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+async function readBody(request) {
+  const text = await request.text();
+  if (!text) return {};
+  if (text.length > 1024 * 1024) throw new Error('Слишком большой запрос.');
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Некорректный JSON.');
+  }
+}
+
+function getClientIp(request) {
+  return (
+    request.headers.get('cf-connecting-ip') ||
+    String(request.headers.get('x-forwarded-for') || '').split(',')[0].trim() ||
+    'unknown'
+  );
+}
+
+function getClientDevice(userAgent, body = {}) {
+  const ua = String(userAgent || '');
+  const requested = String(body.deviceLabel || '').trim();
+  const allowed = ['Windows 10', 'Windows 11', 'Windows', 'Android', 'Linux', 'Linux (Ubuntu)', 'Linux (Mint)'];
+  if (allowed.includes(requested)) return requested;
+  if (/Android/i.test(ua)) return 'Android';
+  if (/Windows/i.test(ua)) return 'Windows';
+  if (/Linux/i.test(ua)) {
+    if (/Ubuntu/i.test(ua)) return 'Linux (Ubuntu)';
+    if (/Linux Mint|Mint/i.test(ua)) return 'Linux (Mint)';
+    return 'Linux';
+  }
+  return 'Неизвестное устройство';
+}
+
+function getClientMeta(request, body = {}) {
+  const width = Number(body.screenWidth);
+  const height = Number(body.screenHeight);
+  const dpr = Number(body.devicePixelRatio);
+  return {
+    ip: getClientIp(request),
+    user_agent: String(request.headers.get('user-agent') || '').slice(0, 500),
+    device: getClientDevice(request.headers.get('user-agent'), body),
+    screen_width: Number.isInteger(width) && width > 0 && width <= 10000 ? width : null,
+    screen_height: Number.isInteger(height) && height > 0 && height <= 10000 ? height : null,
+    screen_dpr: Number.isFinite(dpr) && dpr > 0 && dpr <= 10 ? Math.round(dpr * 100) / 100 : null
+  };
+}
+
+function getCookie(request, name) {
+  const raw = request.headers.get('cookie') || '';
+  const found = raw.split(';').map((x) => x.trim()).find((x) => x.startsWith(name + '='));
+  return found ? decodeURIComponent(found.slice(name.length + 1)) : '';
+}
+
+function setCookieHeader(name, value, maxAge, isProd) {
+  const secure = isProd ? '; Secure' : '';
+  return `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}${secure}`;
+}
+
+function clearCookieHeader(name) {
+  return `${name}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`;
+}
+
+function authToken(request) {
+  const value = request.headers.get('authorization') || '';
+  return value.startsWith('Bearer ') ? value.slice(7).trim() : '';
+}
+
+// ---------- Domain helpers ----------
+
+function normalizeNick(value) {
+  return String(value || '').trim().toLowerCase();
+}
+function validNick(value) {
+  return /^[A-Za-zА-Яа-яЁё0-9_ .-]{3,24}$/.test(String(value || '').trim());
+}
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function safeUser(row) {
+  if (!row) return null;
+  return {
+    email: row.email,
+    nick: row.nick,
+    balance: Number(row.balance || 0),
+    banned: !!row.banned,
+    plan: row.plan || null,
+    isAdmin: undefined, // set by caller (needs ADMIN_NICK from env)
+    expires: row.expires == null ? null : new Date(row.expires).getTime(),
+    registeredAt: row.registered_at ? new Date(row.registered_at).getTime() : null,
+    lastSeen: row.last_seen ? new Date(row.last_seen).getTime() : null,
+    isOnline: !!row.is_online,
+    lastIp: row.last_ip || null,
+    lastDevice: row.last_device || getClientDevice(row.last_user_agent),
+    lastUserAgent: row.last_user_agent || null,
+    screenWidth: row.last_screen_width == null ? null : Number(row.last_screen_width),
+    screenHeight: row.last_screen_height == null ? null : Number(row.last_screen_height),
+    screenDpr: row.last_screen_dpr == null ? null : Number(row.last_screen_dpr)
+  };
+}
+
+function friendOnline(lastSeen, isOnline = null) {
+  if (!lastSeen) return false;
+  const fresh = Date.now() - new Date(lastSeen).getTime() < 12000;
+  return isOnline === false ? false : fresh && (isOnline === true || isOnline == null);
+}
+function publicFriend(row) {
+  return {
+    email: row.email,
+    nick: row.nick,
+    lastSeen: row.last_seen ? new Date(row.last_seen).getTime() : null,
+    online: friendOnline(row.last_seen, row.is_online)
+  };
+}
+
+const AUDIT_ACTION_NAMES = {
+  '/api/auth/login': 'Вход в аккаунт',
+  '/api/auth/register': 'Регистрация аккаунта',
+  '/api/auth/check-username': 'Проверка имени пользователя',
+  '/api/auth/me': 'Проверка сессии',
+  '/api/auth/change-password': 'Смена пароля',
+  '/api/auth/delete-account': 'Удаление аккаунта',
+  '/api/auth/logout': 'Выход из аккаунта',
+  '/api/admin/login': 'Вход в админ-панель',
+  '/api/admin/logout': 'Выход из админ-панели',
+  '/api/admin/find-player': 'Поиск игрока',
+  '/api/admin/ban': 'Изменение блокировки',
+  '/api/admin/role': 'Изменение прав администратора',
+  '/api/friends/search': 'Поиск друга',
+  '/api/friends/request': 'Запрос в друзья',
+  '/api/friends/requests': 'Просмотр запросов в друзья',
+  '/api/friends/respond': 'Ответ на запрос в друзья',
+  '/api/friends': 'Список друзей',
+  '/api/friends/messages': 'Сообщения друзей',
+  '/api/storage/sync': 'Синхронизация хранилища'
+};
+function auditActionName(pathname, method) {
+  return AUDIT_ACTION_NAMES[pathname] || `${method} ${pathname}`;
+}
+
+// ---------- App: built per-request from env ----------
+
+class App {
+  constructor(env, request) {
+    this.env = env;
+    this.request = request;
+    this.adminNick = normalizeNick(env.ADMIN_NICK || 'winzuxx');
+    const url = String(env.SUPABASE_URL || '').trim().replace(/\/rest\/v1\/?$/, '');
+    const key = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+    this.supabase =
+      url && key
+        ? createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
+        : null;
+  }
+
+  requireSupabase() {
+    if (this.supabase) return true;
+    return false;
+  }
+
+  toSafeUser(row) {
+    const user = safeUser(row);
+    if (!user) return null;
+    user.isAdmin = normalizeNick(row.nick) === this.adminNick || !!row.is_admin;
+    return user;
+  }
+
+  async sessionHash(value) {
+    return sha256Hex(value);
+  }
+
+  async findByNick(nick) {
+    const { data, error } = await this.supabase
+      .from('accounts')
+      .select('*')
+      .eq('nick_normalized', normalizeNick(nick))
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  }
+  async findByEmail(email) {
+    const { data, error } = await this.supabase
+      .from('accounts')
+      .select('*')
+      .eq('email', String(email || '').trim().toLowerCase())
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  }
+
+  async createPersistentSession(email, nick, kind = 'user') {
+    const t = token();
+    const tokenHash = await this.sessionHash(t);
+    const { error } = await this.supabase
+      .from('sessions')
+      .insert({ token_hash: tokenHash, email: String(email || '').trim().toLowerCase(), nick: String(nick || '').trim(), kind });
+    if (error) throw error;
+    return t;
+  }
+  async getPersistentSession(kind = 'user') {
+    const t = authToken(this.request);
+    if (!t) return null;
+    const tokenHash = await this.sessionHash(t);
+    const { data, error } = await this.supabase
+      .from('sessions')
+      .select('email,nick,kind,created_at')
+      .eq('token_hash', tokenHash)
+      .eq('kind', kind)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? { ...data, token: t } : null;
+  }
+  async deletePersistentSession(tokenValue, kind = null) {
+    if (!tokenValue) return;
+    const tokenHash = await this.sessionHash(tokenValue);
+    let query = this.supabase.from('sessions').delete().eq('token_hash', tokenHash);
+    if (kind) query = query.eq('kind', kind);
+    await query;
+  }
+  async deleteSessionsForEmail(email, kind = null) {
+    let query = this.supabase.from('sessions').delete().eq('email', String(email || '').trim().toLowerCase());
+    if (kind) query = query.eq('kind', kind);
+    await query;
+  }
+  async updatePersistentSessionToken(oldToken, email, nick) {
+    if (!oldToken) return;
+    const tokenHash = await this.sessionHash(oldToken);
+    const { error } = await this.supabase
+      .from('sessions')
+      .update({ email: String(email || '').trim().toLowerCase(), nick: String(nick || '').trim() })
+      .eq('token_hash', tokenHash);
+    if (error) throw error;
+  }
+
+  async getUserSession() {
+    return this.getPersistentSession('user');
+  }
+  async getAdmin() {
+    const cookieToken = getCookie(this.request, 'sc_admin');
+    const bearer = authToken(this.request);
+    const t = bearer || cookieToken;
+    if (!t) return null;
+    const tokenHash = await this.sessionHash(t);
+    const { data, error } = await this.supabase
+      .from('sessions')
+      .select('email,nick,kind,created_at')
+      .eq('token_hash', tokenHash)
+      .eq('kind', 'admin')
+      .maybeSingle();
+    if (error) throw error;
+    return data ? { ...data, token: t } : null;
+  }
+
+  async auditLog(action, details = '') {
+    if (!this.supabase) return;
+    try {
+      const session = await this.getPersistentSession('user');
+      const admin = session ? null : await this.getAdmin();
+      const actor = session || admin;
+      await this.supabase.from('activity_logs').insert({
+        ip: getClientIp(this.request),
+        nick: actor?.nick || null,
+        action: String(action || '').slice(0, 200),
+        details: String(details || '').slice(0, 500)
+      });
+    } catch (e) {
+      console.warn('Audit log error:', e.message);
+    }
+  }
+
+  adminUser(row) {
+    const user = this.toSafeUser(row);
+    if (!user) return null;
+    return {
+      ...user,
+      lastIp: row.last_ip || null,
+      lastDevice: row.last_device || getClientDevice(row.last_user_agent),
+      lastUserAgent: row.last_user_agent || null,
+      screenWidth: row.last_screen_width == null ? null : Number(row.last_screen_width),
+      screenHeight: row.last_screen_height == null ? null : Number(row.last_screen_height),
+      screenDpr: row.last_screen_dpr == null ? null : Number(row.last_screen_dpr)
+    };
+  }
+
+  async findFriendRequestBetween(a, b, statuses = ['accepted']) {
+    const x = String(a || '').trim().toLowerCase();
+    const y = String(b || '').trim().toLowerCase();
+    const { data, error } = await this.supabase
+      .from('friend_requests')
+      .select('id,status,requester_email,addressee_email')
+      .in('status', statuses)
+      .or(`and(requester_email.eq.${x},addressee_email.eq.${y}),and(requester_email.eq.${y},addressee_email.eq.${x})`)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return data?.[0] || null;
+  }
+
+  async requireUser() {
+    const session = await this.getUserSession();
+    if (!session) return null;
+    const account = await this.findByEmail(session.email);
+    if (!account || account.banned) return null;
+    return account;
+  }
+
+  async requireAdmin() {
+    const admin = await this.getAdmin();
+    if (!admin) return null;
+    const account = await this.findByEmail(admin.email);
+    if (!account || account.banned || (normalizeNick(account.nick) !== this.adminNick && !account.is_admin)) {
+      const t = getCookie(this.request, 'sc_admin') || authToken(this.request);
+      if (t) await this.deletePersistentSession(t, 'admin').catch(() => {});
+      return null;
+    }
+    return account;
+  }
+}
+
+// ---------- Email (Resend HTTP API — replaces nodemailer/SMTP) ----------
+
+async function sendResetCodeEmail(env, email, code) {
+  const apiKey = env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('Почтовый сервис не настроен. Добавьте RESEND_API_KEY в переменные окружения.');
+  }
+  const from = env.MAIL_FROM || 'Space Client <onboarding@resend.dev>';
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to: email,
+      subject: 'Space Client — код восстановления пароля',
+      text: `Ваш код восстановления: ${code}. Код действителен 10 минут.`,
+      html: `<div style="font-family:Arial;background:#0b0810;color:#f5f2fa;padding:32px"><div style="max-width:520px;margin:auto;background:#15101d;border:1px solid #2c2139;border-radius:18px;padding:28px"><div style="color:#9d75ff;font-weight:700">SPACE CLIENT</div><h1>Восстановление пароля</h1><p style="color:#9a91a5">Введите этот код:</p><div style="font-size:34px;letter-spacing:9px;font-weight:800;color:#a77cff">${code}</div><p style="color:#777080;font-size:12px">Код действителен 10 минут.</p></div></div>`
+    })
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error('Не удалось отправить письмо: ' + (text || resp.status));
+  }
+}
+
+// ---------- Route handlers ----------
+// Each handler takes (app, request) and returns a Response.
+
+async function handleClientLog(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const action = String(body.action || body.type || 'event').slice(0, 200);
+  const details = String(body.details || '').slice(0, 500);
+  const session = await app.getUserSession().catch(() => null);
+  const actor = session || (await app.getAdmin().catch(() => null));
+  const meta = getClientMeta(request, body);
+  const { error } = await app.supabase.from('activity_logs').insert({
+    ip: meta.ip,
+    nick: actor?.nick || null,
+    action,
+    details,
+    user_agent: meta.user_agent,
+    device: meta.device,
+    screen_width: meta.screen_width,
+    screen_height: meta.screen_height,
+    screen_dpr: meta.screen_dpr
+  });
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true });
+}
+
+async function handleRegister(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const nick = String(body.nick || body.username || '').trim();
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  if (!validNick(nick)) return json(request, 400, { message: 'Имя пользователя: 3–24 символа, без спецсимволов.' });
+  if (!validEmail(email)) return json(request, 400, { message: 'Введите корректную почту.' });
+  if (password.length < 8) return json(request, 400, { message: 'Пароль должен содержать минимум 8 символов.' });
+
+  const [emailUser, nickUser] = await Promise.all([app.findByEmail(email), app.findByNick(nick)]);
+  if (emailUser) return json(request, 409, { message: 'Такой аккаунт уже существует.' });
+  if (nickUser) return json(request, 409, { message: 'Этот ник уже занят.' });
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const meta = getClientMeta(request, body);
+  const row = {
+    email,
+    nick,
+    nick_normalized: normalizeNick(nick),
+    password_hash: passwordHash,
+    balance: 0,
+    banned: false,
+    plan: 'none',
+    expires: null,
+    last_seen: new Date().toISOString(),
+    is_online: true,
+    last_ip: meta.ip,
+    last_user_agent: meta.user_agent,
+    last_device: meta.device,
+    last_screen_width: meta.screen_width,
+    last_screen_height: meta.screen_height,
+    last_screen_dpr: meta.screen_dpr
+  };
+  const { data, error } = await app.supabase.from('accounts').insert(row).select('*').single();
+  if (error) return json(request, 500, { message: error.message });
+
+  const t = await app.createPersistentSession(data.email, data.nick, 'user');
+  return json(request, 200, { ok: true, token: t, user: app.toSafeUser(data) });
+}
+
+async function handleLogin(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const nick = String(body.nick || body.username || '').trim();
+  const password = String(body.password || '');
+  const account = await app.findByNick(nick);
+  if (!account) return json(request, 404, { message: 'Аккаунт с таким именем пользователя не найден.' });
+  if (account.banned) return json(request, 403, { message: 'Этот аккаунт заблокирован администратором.' });
+  if (!account.password_hash || !(await bcrypt.compare(password, account.password_hash))) {
+    return json(request, 401, { message: 'Неверный пароль.' });
+  }
+
+  const now = new Date().toISOString();
+  const meta = getClientMeta(request, body);
+  const { data: updatedAccount } = await app.supabase
+    .from('accounts')
+    .update({
+      last_seen: now,
+      is_online: true,
+      last_ip: meta.ip,
+      last_user_agent: meta.user_agent,
+      last_device: meta.device,
+      last_screen_width: meta.screen_width,
+      last_screen_height: meta.screen_height,
+      last_screen_dpr: meta.screen_dpr
+    })
+    .eq('email', account.email)
+    .select('*')
+    .single();
+  const t = await app.createPersistentSession(account.email, account.nick, 'user');
+  return json(request, 200, { ok: true, token: t, user: app.toSafeUser(updatedAccount || { ...account, last_seen: now }) });
+}
+
+async function handleCheckUsername(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const account = await app.findByNick(body.nick);
+  if (!account) return json(request, 404, { message: 'Аккаунт с таким именем пользователя не найден.' });
+  return json(request, 200, { ok: true, email: account.email, nick: account.nick });
+}
+
+async function handleMigrateLocal(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const nick = String(body.nick || '').trim();
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  if (!validNick(nick) || !validEmail(email) || password.length < 8) {
+    return json(request, 400, { message: 'Некорректные данные аккаунта.' });
+  }
+  const existing = await app.findByEmail(email);
+  if (existing) return json(request, 200, { ok: true, exists: true });
+  const existingNick = await app.findByNick(nick);
+  if (existingNick) return json(request, 409, { message: 'Этот ник уже занят.' });
+  const passwordHash = await bcrypt.hash(password, 12);
+  const { error } = await app.supabase
+    .from('accounts')
+    .insert({ email, nick, nick_normalized: normalizeNick(nick), password_hash: passwordHash, balance: 0, banned: false, plan: 'none', expires: null, last_seen: null });
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, migrated: true });
+}
+
+async function handleMe(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const session = await app.getUserSession();
+  if (!session) return json(request, 401, { message: 'Сессия истекла.' });
+  const account = await app.findByEmail(session.email);
+  if (!account || account.banned) {
+    return json(request, 401, { message: account?.banned ? 'Этот аккаунт заблокирован администратором.' : 'Аккаунт не найден.' });
+  }
+  const now = new Date().toISOString();
+  const meBody = await readBody(request).catch(() => ({}));
+  const meta = getClientMeta(request, meBody);
+  if (!meBody.deviceLabel && account.last_device) meta.device = account.last_device;
+  const { data: updatedAccount, error } = await app.supabase
+    .from('accounts')
+    .update({
+      last_seen: now,
+      is_online: true,
+      last_ip: meta.ip,
+      last_user_agent: meta.user_agent,
+      last_device: meta.device,
+      last_screen_width: meta.screen_width,
+      last_screen_height: meta.screen_height,
+      last_screen_dpr: meta.screen_dpr
+    })
+    .eq('email', account.email)
+    .select('*')
+    .single();
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, user: app.toSafeUser(updatedAccount) });
+}
+
+async function handleActivity(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const account = await app.requireUser();
+  if (!account) return json(request, 401, { message: 'Сессия истекла.' });
+  const now = new Date().toISOString();
+  const meta = getClientMeta(request, body);
+  const url = new URL(request.url);
+  const offline = url.searchParams.get('offline') === '1';
+  const patch = offline
+    ? { is_online: false }
+    : {
+        last_seen: now,
+        is_online: true,
+        last_ip: meta.ip,
+        last_user_agent: meta.user_agent,
+        last_device: meta.device,
+        last_screen_width: meta.screen_width,
+        last_screen_height: meta.screen_height,
+        last_screen_dpr: meta.screen_dpr
+      };
+  const { data: updatedAccount, error } = await app.supabase.from('accounts').update(patch).eq('email', account.email).select('*').single();
+  if (error) return json(request, 500, { message: error.message });
+  const user = app.toSafeUser(updatedAccount || { ...account, ...patch });
+  return json(request, 200, {
+    ok: true,
+    lastSeen: offline ? (account.last_seen ? new Date(account.last_seen).getTime() : null) : Date.now(),
+    online: !offline,
+    activity: { lastIp: user.lastIp, lastDevice: user.lastDevice, screenWidth: user.screenWidth, screenHeight: user.screenHeight, screenDpr: user.screenDpr }
+  });
+}
+
+async function handleLogout(app, request) {
+  const t = authToken(request);
+  if (t) {
+    try {
+      const session = await app.getUserSession();
+      if (session) await app.supabase.from('accounts').update({ is_online: false }).eq('email', session.email);
+    } catch (_) {}
+    await app.deletePersistentSession(t, 'user');
+  }
+  return json(request, 200, { ok: true });
+}
+
+async function handleUpdateProfile(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const session = await app.getUserSession();
+  if (!session) return json(request, 401, { message: 'Сессия истекла.' });
+  const body = await readBody(request);
+  const currentPassword = String(body.currentPassword || '');
+  const nick = String(body.nick || '').trim();
+  const email = String(body.email || '').trim().toLowerCase();
+  const account = await app.findByEmail(session.email);
+  if (!account) return json(request, 404, { message: 'Аккаунт не найден.' });
+  if (!(await bcrypt.compare(currentPassword, account.password_hash || ''))) return json(request, 401, { message: 'Неверный текущий пароль.' });
+  if (!validNick(nick)) return json(request, 400, { message: 'Ник: 3–24 символа, без спецсимволов.' });
+  if (!validEmail(email)) return json(request, 400, { message: 'Введите корректную почту.' });
+  if (email !== account.email && (await app.findByEmail(email))) return json(request, 409, { message: 'Аккаунт с такой почтой уже существует.' });
+  if (normalizeNick(nick) !== normalizeNick(account.nick) && (await app.findByNick(nick))) return json(request, 409, { message: 'Этот ник уже занят.' });
+
+  const { data, error } = await app.supabase.from('accounts').update({ email, nick, nick_normalized: normalizeNick(nick) }).eq('email', account.email).select('*').single();
+  if (error) return json(request, 500, { message: error.message });
+  const currentToken = authToken(request);
+  await app.updatePersistentSessionToken(currentToken, data.email, data.nick);
+  return json(request, 200, { ok: true, user: app.toSafeUser(data) });
+}
+
+async function handleChangePassword(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const session = await app.getUserSession();
+  if (!session) return json(request, 401, { message: 'Сессия истекла.' });
+  const body = await readBody(request);
+  const currentPassword = String(body.currentPassword || '');
+  const newPassword = String(body.newPassword || '');
+  const account = await app.findByEmail(session.email);
+  if (!account) return json(request, 404, { message: 'Аккаунт не найден.' });
+  if (!(await bcrypt.compare(currentPassword, account.password_hash || ''))) return json(request, 401, { message: 'Неверный текущий пароль.' });
+  if (newPassword.length < 8) return json(request, 400, { message: 'Новый пароль должен содержать минимум 8 символов.' });
+  if (newPassword === currentPassword) return json(request, 400, { message: 'Новый пароль должен отличаться от текущего.' });
+  const password_hash = await bcrypt.hash(newPassword, 12);
+  const { error } = await app.supabase.from('accounts').update({ password_hash }).eq('email', account.email);
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true });
+}
+
+async function handleDeleteAccount(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const session = await app.getUserSession();
+  if (!session) return json(request, 401, { message: 'Сессия истекла.' });
+  const body = await readBody(request);
+  const account = await app.findByEmail(session.email);
+  if (!account) return json(request, 404, { message: 'Аккаунт не найден.' });
+  if (!(await bcrypt.compare(String(body.password || ''), account.password_hash || ''))) return json(request, 401, { message: 'Неверный пароль.' });
+  if (normalizeNick(account.nick) === app.adminNick) return json(request, 400, { message: 'Администратор не может удалить аккаунт через эту форму.' });
+  const { error } = await app.supabase.from('accounts').delete().eq('email', account.email);
+  if (error) return json(request, 500, { message: error.message });
+  await app.deleteSessionsForEmail(account.email);
+  return json(request, 200, { ok: true });
+}
+
+async function handleAdminLogin(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const session = await app.getUserSession();
+  if (!session) return json(request, 401, { message: 'Сначала войдите в аккаунт администратора.' });
+  const account = await app.findByEmail(session.email);
+  const adminAllowed = !!account && !account.banned && (normalizeNick(account.nick) === app.adminNick || !!account.is_admin);
+  if (!adminAllowed) return json(request, 403, { message: 'Доступ к админ-панели запрещён.' });
+  const t = await app.createPersistentSession(account.email, account.nick, 'admin');
+  const isProd = new URL(request.url).protocol === 'https:';
+  return json(request, 200, { ok: true, adminToken: t }, { 'Set-Cookie': setCookieHeader('sc_admin', t, 315360000, isProd) });
+}
+async function handleAdminLogout(app, request) {
+  const cookieToken = getCookie(request, 'sc_admin');
+  const bearer = authToken(request);
+  if (cookieToken) await app.deletePersistentSession(cookieToken, 'admin');
+  if (bearer) await app.deletePersistentSession(bearer, 'admin');
+  return json(request, 200, { ok: true }, { 'Set-Cookie': clearCookieHeader('sc_admin') });
+}
+
+async function handleAdminFind(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  if (!(await app.requireAdmin())) return json(request, 403, { message: 'Доступ к админ-панели запрещён.' });
+  const body = await readBody(request);
+  const nick = normalizeNick(body.nick);
+  if (!nick) return json(request, 400, { message: 'Укажи ник игрока.' });
+  const account = await app.findByNick(nick);
+  if (!account) return json(request, 404, { message: 'Игрок с таким ником не найден.' });
+  return json(request, 200, { ok: true, player: app.adminUser(account) });
+}
+async function handleAdminActivity(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  if (!(await app.requireAdmin())) return json(request, 403, { message: 'Доступ к админ-панели запрещён.' });
+  const body = await readBody(request);
+  const email = String(body.email || '').trim().toLowerCase();
+  const account = await app.findByEmail(email);
+  if (!account) return json(request, 404, { message: 'Игрок не найден.' });
+  const { data, error } = await app.supabase
+    .from('activity_logs')
+    .select('ip,nick,action,created_at')
+    .eq('nick', account.nick)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, player: app.adminUser(account), history: Array.isArray(data) ? data : [] });
+}
+async function handleAdminBan(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  if (!(await app.requireAdmin())) return json(request, 403, { message: 'Доступ к админ-панели запрещён.' });
+  const body = await readBody(request);
+  const email = String(body.email || '').trim().toLowerCase();
+  const banned = !!body.banned;
+  const account = await app.findByEmail(email);
+  if (!account) return json(request, 404, { message: 'Игрок не найден.' });
+  const currentAdmin = await app.getAdmin();
+  if (banned && currentAdmin && String(currentAdmin.email || '').toLowerCase() === email) return json(request, 400, { message: 'Нельзя заблокировать самого себя.' });
+  if (normalizeNick(account.nick) === app.adminNick && banned) return json(request, 400, { message: 'Нельзя заблокировать администратора.' });
+  const { data, error } = await app.supabase.from('accounts').update({ banned }).eq('email', email).select('*').single();
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, player: app.adminUser(data) });
+}
+async function handleAdminRole(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  if (!(await app.requireAdmin())) return json(request, 403, { message: 'Доступ к админ-панели запрещён.' });
+  const body = await readBody(request);
+  const email = String(body.email || '').trim().toLowerCase();
+  const makeAdmin = !!body.isAdmin;
+  const account = await app.findByEmail(email);
+  if (!account) return json(request, 404, { message: 'Игрок не найден.' });
+  if (normalizeNick(account.nick) === app.adminNick) {
+    return json(request, 400, { message: makeAdmin ? 'Нельзя повторно выдать админку winzuxx — он уже главный администратор.' : 'Нельзя забрать админку у winzuxx — это главный администратор.' });
+  }
+  const currentAdmin = await app.getAdmin();
+  if (!makeAdmin && email === String(currentAdmin?.email || '').toLowerCase()) {
+    return json(request, 400, { message: 'Нельзя забрать админку у самого себя.' });
+  }
+  const { data, error } = await app.supabase.from('accounts').update({ is_admin: makeAdmin }).eq('email', email).select('*').single();
+  if (error) return json(request, 500, { message: error.message });
+  if (!makeAdmin) await app.deleteSessionsForEmail(email, 'admin');
+  return json(request, 200, { ok: true, player: app.adminUser(data) });
+}
+
+async function handleFriendSearch(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const nick = normalizeNick(body.nick);
+  if (!nick || nick.length < 2) return json(request, 400, { message: 'Введи ник игрока.' });
+  const account = await app.findByNick(nick);
+  if (!account) return json(request, 404, { message: 'Игрок с таким ником не найден.' });
+  if (account.email.toLowerCase() === me.email.toLowerCase()) return json(request, 400, { message: 'Нельзя добавить самого себя в друзья.' });
+  const req_ = await app.findFriendRequestBetween(me.email, account.email, ['pending', 'accepted']);
+  return json(request, 200, { ok: true, player: publicFriend(account), friend: req_?.status === 'accepted', status: req_?.status || null });
+}
+async function handleFriendRequest(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const nick = normalizeNick(body.nick);
+  const target = await app.findByNick(nick);
+  if (!target) return json(request, 404, { message: 'Игрок с таким ником не найден.' });
+  if (target.email.toLowerCase() === me.email.toLowerCase()) return json(request, 400, { message: 'Нельзя отправить запрос самому себе.' });
+  const existingFriend = await app.findFriendRequestBetween(me.email, target.email, ['accepted']);
+  if (existingFriend) return json(request, 400, { message: 'Вы уже друзья.' });
+  const existing = await app.findFriendRequestBetween(me.email, target.email, ['pending']);
+  if (existing) {
+    if (existing.requester_email.toLowerCase() === target.email.toLowerCase()) {
+      return json(request, 200, { ok: true, message: 'У этого игрока уже есть запрос к тебе.', incoming: true });
+    }
+    return json(request, 400, { message: 'Запрос уже отправлен.' });
+  }
+  const { error } = await app.supabase.from('friend_requests').insert({ requester_email: me.email, addressee_email: target.email, status: 'pending' });
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, message: 'Запрос в друзья отправлен.' });
+}
+async function handleFriendRequests(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const { data, error } = await app.supabase
+    .from('friend_requests')
+    .select('id,requester_email,addressee_email,status,created_at')
+    .eq('addressee_email', me.email)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) return json(request, 500, { message: error.message });
+  const items = [];
+  for (const r of data || []) {
+    const p = await app.findByEmail(r.requester_email);
+    if (p) items.push({ id: r.id, player: publicFriend(p), createdAt: new Date(r.created_at).getTime() });
+  }
+  return json(request, 200, { ok: true, requests: items });
+}
+async function handleFriendRespond(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const id = String(body.id || '');
+  const accept = !!body.accept;
+  const { data: r, error } = await app.supabase.from('friend_requests').select('*').eq('id', id).eq('addressee_email', me.email).eq('status', 'pending').maybeSingle();
+  if (error) return json(request, 500, { message: error.message });
+  if (!r) return json(request, 404, { message: 'Запрос не найден.' });
+  if (!accept) {
+    await app.supabase.from('friend_requests').update({ status: 'rejected', responded_at: new Date().toISOString() }).eq('id', id);
+    return json(request, 200, { ok: true });
+  }
+  const { error: ue } = await app.supabase.from('friend_requests').update({ status: 'accepted', responded_at: new Date().toISOString() }).eq('id', id);
+  if (ue) return json(request, 500, { message: ue.message });
+  return json(request, 200, { ok: true });
+}
+async function handleFriendsList(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const { data, error } = await app.supabase
+    .from('friend_requests')
+    .select('requester_email,addressee_email,created_at')
+    .eq('status', 'accepted')
+    .or(`requester_email.eq.${me.email},addressee_email.eq.${me.email}`)
+    .order('created_at', { ascending: false });
+  if (error) return json(request, 500, { message: error.message });
+  const items = [];
+  const seen = new Set();
+  for (const f of data || []) {
+    const email = String(f.requester_email).toLowerCase() === me.email.toLowerCase() ? f.addressee_email : f.requester_email;
+    if (seen.has(email.toLowerCase())) continue;
+    seen.add(email.toLowerCase());
+    const p = await app.findByEmail(email);
+    if (p) items.push(publicFriend(p));
+  }
+  items.sort((x, y) => Number(y.online) - Number(x.online) || x.nick.localeCompare(y.nick));
+  return json(request, 200, { ok: true, friends: items });
+}
+async function handleFriendUnread(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const { data, error } = await app.supabase
+    .from('messages')
+    .select('id,sender_email,body,created_at')
+    .eq('receiver_email', me.email)
+    .is('read_at', null)
+    .order('created_at', { ascending: true })
+    .limit(100);
+  if (error) return json(request, 500, { message: error.message });
+  const counts = {};
+  const nickCache = new Map();
+  const notifications = [];
+  for (const row of data || []) {
+    const k = String(row.sender_email || '').toLowerCase();
+    counts[k] = (counts[k] || 0) + 1;
+    if (!nickCache.has(k)) {
+      const p = await app.findByEmail(row.sender_email);
+      nickCache.set(k, p?.nick || '');
+    }
+    notifications.push({ id: row.id, senderEmail: row.sender_email, senderNick: nickCache.get(k) || '', body: String(row.body || '').slice(0, 140), createdAt: new Date(row.created_at).getTime() });
+  }
+  return json(request, 200, { ok: true, total: (data || []).length, counts, notifications });
+}
+async function handleFriendMessages(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const url = new URL(request.url);
+  const friendEmail = String(url.searchParams.get('friendEmail') || '').trim().toLowerCase();
+  if (!friendEmail) return json(request, 400, { message: 'Не указан друг.' });
+  const fr = await app.findFriendRequestBetween(me.email, friendEmail, ['accepted']);
+  if (!fr) return json(request, 403, { message: 'Этот игрок не находится в списке друзей.' });
+  const { data, error } = await app.supabase
+    .from('messages')
+    .select('id,sender_email,receiver_email,body,created_at,read_at,edited_at,deleted_at')
+    .or(`and(sender_email.eq.${me.email},receiver_email.eq.${friendEmail}),and(sender_email.eq.${friendEmail},receiver_email.eq.${me.email})`)
+    .order('created_at', { ascending: true })
+    .limit(100);
+  if (error) return json(request, 500, { message: error.message });
+  const incoming = (data || []).filter((m) => String(m.receiver_email).toLowerCase() === me.email.toLowerCase() && !m.read_at).map((m) => m.id);
+  if (incoming.length) await app.supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', incoming);
+  const ids = (data || []).map((m) => m.id);
+  let reactions = [];
+  if (ids.length) {
+    const rr = await app.supabase.from('message_reactions').select('message_id,email,emoji').in('message_id', ids);
+    if (!rr.error) reactions = rr.data || [];
+  }
+  const byId = {};
+  for (const r of reactions) (byId[r.message_id] ||= []).push({ email: r.email, emoji: r.emoji });
+  return json(request, 200, {
+    ok: true,
+    messages: (data || []).map((m) => ({
+      id: m.id,
+      senderEmail: m.sender_email,
+      body: m.deleted_at ? 'Сообщение удалено' : m.body,
+      deleted: !!m.deleted_at,
+      edited: !!m.edited_at,
+      createdAt: new Date(m.created_at).getTime(),
+      readAt: m.read_at ? new Date(m.read_at).getTime() : null,
+      reactions: byId[m.id] || []
+    }))
+  });
+}
+async function handleFriendMessage(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const friendEmail = String(body.friendEmail || '').trim().toLowerCase();
+  const text = String(body.message || '').trim();
+  if (!friendEmail || !text) return json(request, 400, { message: 'Напиши сообщение.' });
+  if (text.length > 2000) return json(request, 400, { message: 'Сообщение слишком длинное.' });
+  const fr = await app.findFriendRequestBetween(me.email, friendEmail, ['accepted']);
+  if (!fr) return json(request, 403, { message: 'Сначала добавьте друг друга в друзья.' });
+  const target = await app.findByEmail(friendEmail);
+  if (!target) return json(request, 404, { message: 'Игрок не найден.' });
+  const { data, error } = await app.supabase
+    .from('messages')
+    .insert({ sender_email: me.email, receiver_email: friendEmail, body: text })
+    .select('id,sender_email,receiver_email,body,created_at,edited_at,deleted_at')
+    .single();
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, message: { id: data.id, senderEmail: data.sender_email, body: data.body, createdAt: new Date(data.created_at).getTime(), edited: false, deleted: false, reactions: [] } });
+}
+async function getMessageForUser(app, me, id) {
+  const { data, error } = await app.supabase.from('messages').select('id,sender_email,receiver_email,body,created_at,edited_at,deleted_at').eq('id', id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const mine = String(data.sender_email).toLowerCase() === String(me.email).toLowerCase();
+  const friend = await app.findFriendRequestBetween(me.email, mine ? data.receiver_email : data.sender_email, ['accepted']);
+  if (!friend) return null;
+  return data;
+}
+async function handleFriendMessageEdit(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const id = String(body.id || '');
+  const text = String(body.message || '').trim();
+  if (!id || !text) return json(request, 400, { message: 'Напиши сообщение.' });
+  if (text.length > 2000) return json(request, 400, { message: 'Сообщение слишком длинное.' });
+  const m = await getMessageForUser(app, me, id);
+  if (!m) return json(request, 404, { message: 'Сообщение не найдено.' });
+  if (String(m.sender_email).toLowerCase() !== me.email.toLowerCase()) return json(request, 403, { message: 'Можно изменять только свои сообщения.' });
+  if (m.deleted_at) return json(request, 400, { message: 'Удалённое сообщение нельзя изменить.' });
+  const { data, error } = await app.supabase.from('messages').update({ body: text, edited_at: new Date().toISOString() }).eq('id', id).eq('sender_email', me.email).select('id,body,edited_at').single();
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, message: { id: data.id, body: data.body, edited: true, editedAt: new Date(data.edited_at).getTime() } });
+}
+async function handleFriendMessageDelete(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const id = String(body.id || '');
+  if (!id) return json(request, 400, { message: 'Сообщение не найдено.' });
+  const m = await getMessageForUser(app, me, id);
+  if (!m) return json(request, 404, { message: 'Сообщение не найдено.' });
+  if (String(m.sender_email).toLowerCase() !== me.email.toLowerCase()) return json(request, 403, { message: 'Можно удалять только свои сообщения.' });
+  const { error } = await app.supabase.from('messages').update({ body: '', deleted_at: new Date().toISOString(), edited_at: null }).eq('id', id).eq('sender_email', me.email);
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true });
+}
+async function handleFriendMessageReaction(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const me = await app.requireUser();
+  if (!me) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const body = await readBody(request);
+  const id = String(body.id || '');
+  const emoji = String(body.emoji || '').trim();
+  const allowed = new Set(['❤️', '😂', '😍', '😮', '😢', '👍', '🔥', '🎉']);
+  if (!id || !allowed.has(emoji)) return json(request, 400, { message: 'Недопустимая реакция.' });
+  const m = await getMessageForUser(app, me, id);
+  if (!m) return json(request, 404, { message: 'Сообщение не найдено.' });
+  const { data: existing, error: findError } = await app.supabase.from('message_reactions').select('id,emoji').eq('message_id', id).eq('email', me.email).maybeSingle();
+  if (findError) return json(request, 500, { message: findError.message });
+  if (existing && existing.emoji === emoji) {
+    const { error } = await app.supabase.from('message_reactions').delete().eq('id', existing.id);
+    if (error) return json(request, 500, { message: error.message });
+    return json(request, 200, { ok: true, removed: true });
+  }
+  if (existing) {
+    const { error } = await app.supabase.from('message_reactions').update({ emoji, created_at: new Date().toISOString() }).eq('id', existing.id);
+    if (error) return json(request, 500, { message: error.message });
+    return json(request, 200, { ok: true, replaced: true });
+  }
+  const { error } = await app.supabase.from('message_reactions').insert({ message_id: Number(id), email: me.email, emoji });
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, added: true });
+}
+
+async function handleStorageSync(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const users = Array.isArray(body.users) ? body.users : [];
+  if (users.length > 100) return json(request, 400, { message: 'Слишком много аккаунтов.' });
+  let synced = 0;
+  for (const u of users) {
+    const email = String(u.email || '').trim().toLowerCase();
+    const nick = String(u.nick || u.username || '').trim();
+    const password = String(u.password || '');
+    if (!validEmail(email) || !validNick(nick) || password.length < 8) continue;
+    const existing = await app.findByEmail(email);
+    if (existing) continue;
+    if (await app.findByNick(nick)) continue;
+    const password_hash = await bcrypt.hash(password, 12);
+    const { error } = await app.supabase.from('accounts').insert({ email, nick, nick_normalized: normalizeNick(nick), password_hash, balance: 0, banned: false, plan: 'none', expires: null });
+    if (!error) synced++;
+  }
+  return json(request, 200, { ok: true, synced });
+}
+
+// ---------- Password reset (state kept in Supabase, not in-memory) ----------
+
+async function getResetRow(app, email) {
+  const { data, error } = await app.supabase.from('password_resets').select('*').eq('email', email).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function handleForgot(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const e = String(body.email || '').trim().toLowerCase();
+  if (!validEmail(e)) return json(request, 400, { message: 'Некорректная почта.' });
+
+  const existing = await getResetRow(app, e);
+  const now = Date.now();
+  if (existing?.next_allowed_at && new Date(existing.next_allowed_at).getTime() > now) {
+    const retryAfter = Math.max(0, Math.ceil((new Date(existing.next_allowed_at).getTime() - now) / 1000));
+    return json(request, 429, { message: `Подожди ${retryAfter} сек. перед повторной отправкой.`, retryAfter });
+  }
+  if (!(await app.findByEmail(e))) return json(request, 404, { message: 'Аккаунт с такой почтой не найден.' });
+
+  const code = randomCode6();
+  try {
+    await sendResetCodeEmail(app.env, e, code);
+  } catch (err) {
+    return json(request, 503, { message: err.message });
+  }
+  const nextDelay = existing?.next_delay_seconds ? Math.min(existing.next_delay_seconds * 2, 360) : 60;
+  const nowIso = new Date().toISOString();
+  await app.supabase.from('password_resets').upsert({
+    email: e,
+    code,
+    code_expires_at: new Date(now + 600000).toISOString(),
+    verified_token: null,
+    verified_token_expires_at: null,
+    next_allowed_at: new Date(now + nextDelay * 1000).toISOString(),
+    next_delay_seconds: nextDelay,
+    updated_at: nowIso
+  });
+  return json(request, 200, { ok: true, retryAfter: nextDelay });
+}
+
+async function handleVerify(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const e = String(body.email || '').trim().toLowerCase();
+  const row = await getResetRow(app, e);
+  if (!row || !row.code_expires_at || Date.now() > new Date(row.code_expires_at).getTime() || String(body.code || '') !== row.code) {
+    return json(request, 400, { message: 'Неверный или просроченный код.' });
+  }
+  const t = token();
+  const { error } = await app.supabase
+    .from('password_resets')
+    .update({ verified_token: t, verified_token_expires_at: new Date(Date.now() + 600000).toISOString() })
+    .eq('email', e);
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, token: t });
+}
+
+async function handleReset(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const e = String(body.email || '').trim().toLowerCase();
+  const rt = String(body.token || '');
+  const password = body.password;
+  const row = await getResetRow(app, e);
+  if (!row || row.verified_token !== rt || !row.verified_token_expires_at || Date.now() > new Date(row.verified_token_expires_at).getTime()) {
+    return json(request, 400, { message: 'Сессия восстановления истекла. Запроси новый код.' });
+  }
+  if (typeof password !== 'string' || password.length < 8) return json(request, 400, { message: 'Пароль должен содержать минимум 8 символов.' });
+  const password_hash = await bcrypt.hash(password, 12);
+  const { error } = await app.supabase.from('accounts').update({ password_hash }).eq('email', e);
+  if (error) return json(request, 500, { message: error.message });
+  await app.supabase.from('password_resets').delete().eq('email', e);
+  return json(request, 200, { ok: true });
+}
+
+// ---------- Launcher (desktop app) login handoff ----------
+
+async function handleLauncherAuthorize(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const callback = String(body.callback || '').trim();
+  const nonce = String(body.nonce || '').trim();
+  const bearer = authToken(request);
+  if (!bearer || !nonce || !/^https?:\/\/127\.0\.0\.1:\d+\/callback$/.test(callback)) return json(request, 400, { message: 'Некорректные данные лаунчера.' });
+  const session = await app.getUserSession();
+  if (!session) return json(request, 401, { message: 'Сначала войдите в аккаунт.' });
+  const account = await app.findByEmail(session.email);
+  if (!account || account.banned) return json(request, 403, { message: account?.banned ? 'Этот аккаунт заблокирован.' : 'Аккаунт не найден.' });
+  const ticket = token();
+  const ticketHash = await app.sessionHash(ticket);
+  const bearerHash = await app.sessionHash(bearer);
+  const expires = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+  const { error } = await app.supabase.from('launcher_tickets').insert({
+    ticket_hash: ticketHash,
+    token_hash: bearerHash,
+    token_value: bearer,
+    email: account.email,
+    nick: account.nick,
+    nonce,
+    callback_url: callback,
+    expires_at: expires
+  });
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, redirect: `${callback}?ticket=${encodeURIComponent(ticket)}&nonce=${encodeURIComponent(nonce)}` });
+}
+async function handleLauncherExchange(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const body = await readBody(request);
+  const ticket = String(body.ticket || '').trim();
+  const nonce = String(body.nonce || '').trim();
+  if (!ticket || !nonce) return json(request, 400, { message: 'Недействительный код авторизации.' });
+  const ticketHash = await app.sessionHash(ticket);
+  const { data: row, error: findError } = await app.supabase.from('launcher_tickets').select('*').eq('ticket_hash', ticketHash).eq('nonce', nonce).maybeSingle();
+  if (findError) return json(request, 500, { message: findError.message });
+  if (!row) return json(request, 401, { message: 'Код авторизации не найден или уже использован.' });
+  if (new Date(row.expires_at).getTime() < Date.now()) {
+    await app.supabase.from('launcher_tickets').delete().eq('ticket_hash', row.ticket_hash);
+    return json(request, 401, { message: 'Код авторизации истёк. Запусти вход ещё раз.' });
+  }
+  const { error: delError } = await app.supabase.from('launcher_tickets').delete().eq('ticket_hash', row.ticket_hash);
+  if (delError) return json(request, 500, { message: delError.message });
+  const { data: account } = await app.supabase.from('accounts').select('email,nick,banned').eq('email', row.email).maybeSingle();
+  if (!account || account.banned) return json(request, 403, { message: account?.banned ? 'Этот аккаунт заблокирован.' : 'Аккаунт не найден.' });
+  const { data: sessionRow, error: sessionError } = await app.supabase.from('sessions').select('email,nick,kind').eq('token_hash', row.token_hash).eq('kind', 'user').maybeSingle();
+  if (sessionError || !sessionRow) return json(request, 401, { message: 'Сессия сайта больше недействительна. Войди снова.' });
+  return json(request, 200, { ok: true, token: row.token_value, user: { email: account.email, nick: account.nick } });
+}
+
+async function handleAdminLogs(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  if (!(await app.requireAdmin())) return json(request, 403, { message: 'Доступ к админ-панели запрещён.' });
+  const { data, error } = await app.supabase.from('activity_logs').select('id,ip,nick,action,details,created_at').order('id', { ascending: false }).limit(100);
+  if (error) return json(request, 500, { message: error.message });
+  return json(request, 200, { ok: true, logs: (data || []).reverse() });
+}
+
+async function handleMusic(app, request, env) {
+  try {
+    const url = new URL('/music/manifest.json', request.url);
+    const res = await env.ASSETS.fetch(new Request(url));
+    if (!res.ok) return json(request, 200, { ok: true, tracks: [] });
+    const data = await res.json();
+    return json(request, 200, { ok: true, tracks: Array.isArray(data.tracks) ? data.tracks : [] });
+  } catch {
+    return json(request, 200, { ok: true, tracks: [] });
+  }
+}
+
+async function handleHealth(app, request) {
+  if (!app.supabase) return json(request, 503, { ok: false, service: 'spaceclient', supabase: false, db: false, message: 'Supabase environment variables are missing.' });
+  try {
+    const { error } = await app.supabase.from('accounts').select('email', { count: 'exact', head: true });
+    if (error) return json(request, 503, { ok: false, service: 'spaceclient', supabase: true, db: false, message: error.message });
+    return json(request, 200, { ok: true, service: 'spaceclient', supabase: true, db: true });
+  } catch (e) {
+    return json(request, 503, { ok: false, service: 'spaceclient', supabase: true, db: false, message: String(e?.message || e) });
+  }
+}
+
+// ---------- Router ----------
+
+const ROUTES = [
+  ['POST', '/api/log', handleClientLog],
+  ['POST', '/api/auth/register', handleRegister],
+  ['POST', '/api/auth/login', handleLogin],
+  ['POST', '/api/launcher/authorize', handleLauncherAuthorize],
+  ['POST', '/api/launcher/exchange', handleLauncherExchange],
+  ['POST', '/api/auth/migrate-local', handleMigrateLocal],
+  ['POST', '/api/auth/check-username', handleCheckUsername],
+  ['GET', '/api/auth/me', handleMe],
+  ['POST', '/api/auth/activity', handleActivity],
+  ['POST', '/api/auth/logout', handleLogout],
+  ['POST', '/api/auth/update-profile', handleUpdateProfile],
+  ['POST', '/api/auth/change-password', handleChangePassword],
+  ['POST', '/api/auth/delete-account', handleDeleteAccount],
+  ['POST', '/api/admin/login', handleAdminLogin],
+  ['POST', '/api/admin/logout', handleAdminLogout],
+  ['POST', '/api/admin/find-player', handleAdminFind],
+  ['POST', '/api/admin/player-activity', handleAdminActivity],
+  ['POST', '/api/admin/ban', handleAdminBan],
+  ['POST', '/api/admin/role', handleAdminRole],
+  ['POST', '/api/friends/search', handleFriendSearch],
+  ['POST', '/api/friends/request', handleFriendRequest],
+  ['GET', '/api/friends/unread', handleFriendUnread],
+  ['GET', '/api/friends/requests', handleFriendRequests],
+  ['POST', '/api/friends/respond', handleFriendRespond],
+  ['GET', '/api/friends', handleFriendsList],
+  ['POST', '/api/friends/messages', handleFriendMessage],
+  ['POST', '/api/friends/messages/edit', handleFriendMessageEdit],
+  ['POST', '/api/friends/messages/delete', handleFriendMessageDelete],
+  ['POST', '/api/friends/messages/reaction', handleFriendMessageReaction],
+  ['GET', '/api/admin/logs', handleAdminLogs],
+  ['GET', '/api/health', handleHealth],
+  ['POST', '/api/storage/sync', handleStorageSync],
+  ['POST', '/api/auth/forgot-password', handleForgot],
+  ['POST', '/api/auth/verify-reset-code', handleVerify],
+  ['POST', '/api/auth/reset-password', handleReset]
+];
+
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
+
+    // /api/friends/messages?friendEmail=... (GET) has a query string.
+    if (request.method === 'GET' && pathname === '/api/friends/messages') {
+      const app = new App(env, request);
+      try {
+        await app.auditLog(auditActionName(pathname, request.method));
+        return await handleFriendMessages(app, request);
+      } catch (err) {
+        console.error(err);
+        return json(request, 500, { message: 'Внутренняя ошибка сервера.' });
+      }
+    }
+
+    if (pathname === '/api/music' && request.method === 'GET') {
+      const app = new App(env, request);
+      return handleMusic(app, request, env);
+    }
+
+    const match = ROUTES.find(([method, path]) => method === request.method && path === pathname);
+    if (match) {
+      const app = new App(env, request);
+      try {
+        if (pathname !== '/api/admin/logs') {
+          await app.auditLog(auditActionName(pathname, request.method));
+        }
+        return await match[2](app, request);
+      } catch (err) {
+        console.error(err);
+        return json(request, 500, { message: 'Внутренняя ошибка сервера.' });
+      }
+    }
+
+    // Not an API route: let the [assets] binding serve the static site
+    // (index.html, style.css, script.js, ...), including its SPA fallback.
+    if (request.method === 'GET' || request.method === 'HEAD') {
+      return env.ASSETS.fetch(request);
+    }
+
+    return json(request, 405, { message: 'Метод не поддерживается.' });
+  }
+};
