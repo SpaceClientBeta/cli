@@ -17,7 +17,7 @@
  *  в public/index.html, иначе у пользователей останется старая ссылка в кеше.
  * ========================================================================== */
 
-window.SPACECLIENT_DOWNLOAD_URL = 'https://github.com/SpaceClientBeta/cli/releases/download/untagged-9fa95802842375c58377/spaceclient_setup.exe';
+window.SPACECLIENT_DOWNLOAD_URL = 'https://github.com/SpaceClientBeta/cli/releases/download/space/spaceclient_setup.exe';
 
 // Имя, под которым файл сохранится у пользователя.
 window.SPACECLIENT_DOWNLOAD_FILENAME = 'spaceclient_setup.exe';
