@@ -1,0 +1,10 @@
+name = "spaceclient-site"
+compatibility_date = "2026-09-17"
+
+# Only the contents of ./public are deployed as static assets.
+# This keeps node_modules, server.js and package.json (used only for
+# the separate Node.js API backend) out of the Cloudflare deploy,
+# which is what was causing the "Asset too large" / workerd error.
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"

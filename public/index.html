@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0710">
+  <title>Space Client</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="style.css?v=18.17">
+</head>
+<body>
+  <div class="stars"></div>
+  <div class="glow glow-1"></div>
+  <div class="glow glow-2"></div>
+
+  <header class="navbar">
+    <a href="#home" class="logo"><span>✦</span> SPACE <b>CLIENT</b></a>
+
+    <nav>
+      <a href="#features">Функции</a>
+      <a href="#about">О клиенте</a>
+      
+    </nav>
+
+    <div class="nav-right">
+      <span id="accountName" class="account-name"></span>
+      <button id="loginOpen" class="btn btn-dark">Войти</button>
+      <button id="registerOpen" class="btn btn-register" type="button">Регистрация</button>
+      <button id="cabinetOpen" class="btn btn-cabinet hidden" type="button">Личный кабинет</button>
+      <button id="friendsOpen" class="btn btn-dark hidden" type="button">Друзья <span id="friendsGlobalCount" class="friends-count hidden">0</span></button>
+      <button id="adminOpen" class="btn btn-dark hidden" type="button">Админ-панель</button>
+      <button id="downloadTop" class="btn btn-purple">Скачать</button>
+      <div id="languageSwitcher" class="language-switcher">
+        <button id="languageToggle" class="language-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="language-globe" aria-hidden="true">◎</span>
+          <span id="currentLanguage">RU</span>
+          <span class="language-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div id="languageMenu" class="language-menu hidden" role="menu">
+          <button type="button" data-lang="ru" role="menuitem">Русский</button>
+          <button type="button" data-lang="en" role="menuitem">English</button>
+          <button type="button" data-lang="zh" role="menuitem">中文</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="home" class="hero reveal">
+      <div class="hero-text">
+        <div class="tag"><span></span> SPACE CLIENT 2.0</div>
+        <h1>Твой игровой мир.<br><strong>Твои правила.</strong></h1>
+        <p>
+          Скачай наш лучший игровой клиент для Minecraft — бесплатно, быстро и без лишнего.
+        </p>
+
+        <div class="hero-buttons">
+          <button id="downloadHero" class="btn btn-purple big">Скачать клиент</button>
+          
+        </div>
+
+        <div class="checks">
+          <span>✓ Быстрый запуск</span>
+          <span>✓ Удобный интерфейс</span>
+          <span>✓ Личный кабинет</span>
+        </div>
+      </div>
+
+      <div class="space-art">
+        <div class="ring ring-1"></div>
+        <div class="ring ring-2"></div>
+        <div class="planet"></div>
+        <div class="floating-card card-a">SPACE<br><small>CLIENT</small></div>
+        <div class="floating-card card-b">2.0<br><small>VERSION</small></div>
+      </div>
+    </section>
+
+    <section id="features" class="section reveal">
+      <div class="section-title">
+        <div class="tag">ВОЗМОЖНОСТИ</div>
+        <h2>Всё необходимое<br>в одном месте.</h2>
+        <p>Минималистичный дизайн, плавные анимации и продуманный интерфейс без лишнего визуального шума.</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <div class="icon">◈</div>
+          <h3>Чистый интерфейс</h3>
+          <p>Тёмная космическая тема, мягкое свечение и выразительные фиолетовые акценты.</p>
+        </article>
+        <article class="feature-card">
+          <div class="icon">✦</div>
+          <h3>Быстрый запуск</h3>
+          <p>Минимум действий — от входа в аккаунт до запуска клиента.</p>
+        </article>
+        <article class="feature-card">
+          <div class="icon">◎</div>
+          <h3>Личный кабинет</h3>
+          <p>Управляй аккаунтом и настройками Space Client в одном месте.</p>
+        </article>
+        <article class="feature-card">
+          <div class="icon">↻</div>
+          <h3>Обновления</h3>
+          <p>Архитектура готова к новым функциям и будущим обновлениям клиента.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="about" class="about reveal">
+      <div>
+        <div class="tag">SPACE CLIENT</div>
+        <h2>Добро пожаловать<br>в свою орбиту.</h2>
+      </div>
+      <p>
+        Листай страницу — блоки плавно появляются, карточки реагируют на наведение,
+        а скачать Space Client можно в один клик.
+      </p>
+    </section>
+
+    <section class="section reveal" id="why-space">
+      <div class="section-title">
+        <div class="tag">ПОЧЕМУ SPACE CLIENT</div>
+        <h2>Создан для игры.<br>Без лишнего.</h2>
+        <p>Скачивай клиент бесплатно, настраивай всё под себя и возвращайся в игру за пару секунд.</p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card"><div class="icon">↓</div><h3>Бесплатная загрузка</h3><p>Никаких тарифов и платных функций — Space Client доступен бесплатно.</p></article>
+        <article class="feature-card"><div class="icon">⚡</div><h3>Быстро</h3><p>Минимум действий между сайтом и запуском клиента.</p></article>
+        <article class="feature-card"><div class="icon">✦</div><h3>Космический стиль</h3><p>Тёмная тема, фиолетовое свечение и плавные анимации.</p></article>
+        <article class="feature-card"><div class="icon">✓</div><h3>Просто</h3><p>Один сайт, один клиент и всё необходимое в одном месте.</p></article>
+      </div>
+    </section>
+
+    <section class="download-box reveal">
+      <div>
+        <div class="tag">ГОТОВ К СТАРТУ?</div>
+        <h2 id="downloadText">Скачай наш лучший клиент для Minecraft — бесплатно.</h2>
+      </div>
+      <button id="downloadBottom" class="btn btn-purple big">Скачать клиент</button>
+    </section>
+  </main>
+
+  <footer>
+    <a href="#home" class="logo"><span>✦</span> SPACE <b>CLIENT</b></a>
+    <div class="footer-cookie-note">Мы используем cookie-файлы и технические данные для работы сайта, сохранения настроек, безопасности и улучшения Space Client.</div>
+    <p>© 2026 Space Client</p>
+  </footer>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-bg" id="modalClose"></div>
+    <div class="modal-window">
+      <button class="close" id="modalX">×</button>
+
+      <div class="tabs">
+        <button class="tab active" data-mode="login">Вход</button>
+        <button class="tab" data-mode="register">Регистрация</button>
+      </div>
+
+      <h2 id="modalTitle">С возвращением</h2>
+      <p id="modalDescription">Войди, чтобы управлять своим доступом.</p>
+
+      <form id="authForm" autocomplete="on">
+        <div id="nickField" class="field-wrap hidden-field"><input id="nick" name="username" type="text" placeholder="Имя пользователя" minlength="3" maxlength="24" autocomplete="username"></div>
+        <div id="emailField" class="field-wrap"><input id="email" name="email" type="email" placeholder="Почта" required autocomplete="email"></div>
+        <div id="authPasswordField" class="field-wrap hidden-field"><input id="password" name="password" type="password" placeholder="Пароль" minlength="8" required autocomplete="current-password"></div>
+        <button type="button" id="forgotPassword" class="forgot-password">Забыли пароль?</button>
+        <div id="authPasswordStrength" class="password-strength hidden"><div class="password-strength-head"><span>Надёжность пароля</span><strong id="authStrengthText">—</strong></div><div class="password-strength-track"><i id="authStrengthBar"></i></div><small id="authStrengthHint">Используй 8+ символов, цифры и буквы.</small></div>
+        <button type="button" class="auth-back hidden" id="authBack" aria-label="Вернуться к имени пользователя" title="Вернуться к имени пользователя"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5M8.5 12H19"/></svg></button>
+        <button type="submit" class="btn btn-purple full" id="authSubmit">Войти</button>
+        <div id="authError"></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="cabinetModal" class="modal hidden">
+    <div class="modal-bg" id="cabinetClose"></div>
+    <div class="cabinet-window">
+      <button class="close" id="cabinetX">×</button>
+      <div class="cabinet-head">
+        <div class="cabinet-avatar" aria-hidden="true"><img id="cabinetAvatar" src="assets/favicon.svg" alt=""></div>
+        <div><div class="tag">ЛИЧНЫЙ КАБИНЕТ</div><h2>Твой профиль</h2><p>Управляй аккаунтом и доступом в одном месте.</p></div>
+      </div>
+      <div class="profile-grid">
+        <div class="profile-item editable-profile"><span>Ник</span><strong id="profileNick">—</strong><button class="profile-edit" data-edit="nick" type="button" aria-label="Изменить ник">Изменить</button></div>
+        <div class="profile-item editable-profile"><span>Почта</span><strong id="profileEmail">—</strong><button class="profile-edit" data-edit="email" type="button" aria-label="Изменить почту">Изменить</button></div>
+        <div class="profile-item activity-profile-item"><span>Активность</span><strong id="profileActivity" class="activity-status offline">Офлайн</strong></div>
+      </div>
+      <div class="activity-data-panel">
+        <div id="activityDataTitle" class="activity-data-title">ДАННЫЕ АКТИВНОСТИ</div>
+        <div class="activity-data-grid">
+          <div class="activity-data-item"><span id="activityLastLabel">ПОСЛЕДНЯЯ АКТИВНОСТЬ</span><strong id="activityLastValue">—</strong></div>
+          <div class="activity-data-item"><span id="activityIpLabel">IP-АДРЕС</span><strong id="profileActivityIp">—</strong></div>
+          <div class="activity-data-item"><span id="activityDeviceLabel">УСТРОЙСТВО</span><strong id="profileActivityDevice">—</strong></div>
+          <div class="activity-data-item"><span id="activityScreenLabel">РАЗРЕШЕНИЕ ЭКРАНА</span><strong id="profileActivityScreen">—</strong></div>
+        </div>
+      </div>
+      <div class="cabinet-actions">
+        <button id="cabinetChangePassword" class="btn btn-dark">Сменить пароль</button>
+        <button id="cabinetLogout" class="btn btn-dark">Выйти из аккаунта</button>
+        <button id="cabinetDelete" class="btn btn-danger">Удалить аккаунт</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div id="friendsModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-bg" id="friendsClose"></div>
+    <div class="cabinet-window friends-window friends-maintenance-window">
+      <button class="close" id="friendsX" type="button" aria-label="Закрыть">×</button>
+      <div class="friends-maintenance">
+        <div class="maintenance-visual" aria-hidden="true">
+          <div class="maintenance-orbit orbit-a"></div>
+          <div class="maintenance-orbit orbit-b"></div>
+          <div class="maintenance-glow"></div>
+          <img src="assets/friends-maintenance.svg" alt="">
+        </div>
+        <div class="tag" id="friendsMaintenanceTag">ДРУЗЬЯ</div>
+        <h2 id="friendsMaintenanceTitle">Функция временно недоступна</h2>
+        <p id="friendsMaintenanceText">У нас слабые серверы, поэтому эта функция временно не работает. Мы уже работаем над этим.</p>
+        <div class="maintenance-status"><span class="maintenance-dot"></span><span id="friendsMaintenanceStatus">Мы уже работаем над этим</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-bg" id="adminClose"></div>
+    <div class="cabinet-window admin-window">
+      <button class="close" id="adminX" type="button" aria-label="Закрыть">×</button>
+      <div class="cabinet-head">
+        <div class="cabinet-avatar" aria-hidden="true"><img src="assets/favicon.svg" alt=""></div>
+        <div><div class="tag">ADMIN PANEL</div><h2 id="adminPanelTitle">Управление игроками</h2><p id="adminPanelDescription">Управление игроками и правами администратора.</p></div>
+      </div>
+      <div class="admin-search-row">
+        <input id="adminNickSearch" class="admin-input" type="text" placeholder="Ник игрока" autocomplete="off">
+        <button id="adminFind" class="btn btn-purple" type="button">Найти</button>
+      </div>
+      <div id="adminResult" class="admin-result hidden">
+        <div class="admin-player-head">
+          <div><span>Игрок</span><strong id="adminPlayerNick">—</strong></div>
+          <div><span>Сеть</span><strong id="adminPlayerActivity" class="activity-status offline">Офлайн</strong></div>
+          <div><span>Администратор</span><strong id="adminPlayerAdmin">Нет</strong></div>
+        </div>
+        <div class="admin-actions-grid">
+          <div class="admin-ban">
+            <button id="adminBan" class="btn btn-danger" type="button">Забанить игрока</button>
+            <button id="adminUnban" class="btn btn-dark" type="button">Разбанить игрока</button>
+          </div>
+        </div>
+        <div class="admin-control-card admin-details-card">
+          <div class="admin-control-title">Данные активности</div>
+          <div class="admin-details-grid">
+            <div><span>Последняя активность</span><strong id="adminLastSeenDetail">—</strong></div>
+            <div><span>IP-адрес</span><strong id="adminIpDetail">—</strong></div>
+            <div><span>Устройство</span><strong id="adminDeviceDetail">—</strong></div>
+            <div><span>Разрешение экрана</span><strong id="adminScreenDetail">—</strong></div>
+          </div>
+        </div>
+        <div class="admin-control-card">
+          <div class="admin-control-title">Права администратора</div>
+          <div class="admin-role-row">
+            <button id="adminMakeAdmin" class="btn btn-purple" type="button">Сделать администратором</button>
+            <button id="adminRemoveAdmin" class="btn btn-dark" type="button">Забрать администратора</button>
+          </div>
+        </div>
+      </div>
+      <div id="adminError" class="admin-error"></div>
+    </div>
+  </div>
+
+  <div id="deleteModal" class="modal hidden">
+    <div class="modal-bg" id="deleteClose"></div>
+    <div class="delete-window">
+      <button class="close" id="deleteX" type="button">×</button>
+      <div class="danger-icon">!</div>
+      <div class="tag">УДАЛЕНИЕ АККАУНТА</div>
+      <h2>Удалить аккаунт?</h2>
+      <p class="delete-warning">Это действие нельзя отменить. Ваш профиль и данные аккаунта будут удалены.</p>
+      <form id="deleteForm">
+        <div class="field-wrap"><input id="deletePassword" type="password" placeholder="Введите пароль" autocomplete="current-password" required></div>
+        <div id="deleteError"></div>
+        <div class="delete-actions">
+          <button id="deleteCancel" class="btn btn-dark" type="button">Нет, отмена</button>
+          <button class="btn btn-danger" type="submit">Удалить аккаунт</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <div id="editProfileModal" class="modal hidden">
+    <div class="modal-bg" id="editProfileClose"></div>
+    <div class="edit-profile-window">
+      <button class="close" id="editProfileX" type="button">×</button>
+      <div class="edit-profile-icon">✦</div>
+      <div class="tag">НАСТРОЙКИ ПРОФИЛЯ</div>
+      <h2 id="editProfileTitle">Изменить данные</h2>
+      <p id="editProfileDescription" class="edit-profile-description">Обнови ник или почту — изменения применятся сразу.</p>
+      <form id="editProfileForm">
+        <div class="edit-profile-fields" id="profileDataFields">
+          <label class="edit-field"><span>Ник</span><input id="editNick" type="text" minlength="3" maxlength="24" autocomplete="username"></label>
+          <label class="edit-field"><span>Почта</span><input id="editEmail" type="email" autocomplete="email"></label>
+          <label class="edit-field password-field"><span>Текущий пароль</span><input id="editCurrentPassword" type="password" autocomplete="current-password" placeholder="Для подтверждения изменений"></label>
+        </div>
+        <div class="edit-profile-fields password-change-fields hidden" id="passwordChangeFields">
+          <label class="edit-field"><span>Текущий пароль</span><input id="changeCurrentPassword" type="password" autocomplete="current-password" placeholder="Введите текущий пароль"></label>
+          <label class="edit-field"><span>Новый пароль</span><input id="newPassword" name="new-password" type="password" minlength="8" autocomplete="new-password" placeholder="Минимум 8 символов"></label>
+          <div id="changePasswordStrength" class="password-strength"><div class="password-strength-head"><span>Надёжность пароля</span><strong id="changeStrengthText">—</strong></div><div class="password-strength-track"><i id="changeStrengthBar"></i></div><small id="changeStrengthHint">Используй 8+ символов, цифры и буквы.</small></div>
+          <label class="edit-field"><span>Повторите новый пароль</span><input id="confirmPassword" name="new-password-confirm" type="password" minlength="8" autocomplete="new-password" placeholder="Повторите новый пароль"></label>
+        </div>
+        <div id="editProfileError" class="edit-profile-error"></div>
+        <div class="edit-profile-actions">
+          <button id="editProfileCancel" class="btn btn-dark" type="button">Отмена</button>
+          <button class="btn btn-primary" type="submit">Сохранить изменения</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <div id="resetModal" class="modal hidden">
+    <div class="modal-bg" id="resetClose"></div>
+    <div class="reset-window">
+      <button class="auth-back reset-back" id="resetBack" type="button" aria-label="Назад" title="Назад"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5M8.5 12H19"/></svg></button>
+      <button class="close" id="resetX" type="button" aria-label="Закрыть">×</button>
+      <div class="tag">ВОССТАНОВЛЕНИЕ ДОСТУПА</div>
+      <h2 id="resetTitle">Сброс пароля</h2>
+      <p id="resetDescription">Код подтверждения будет отправлен на почту аккаунта.</p>
+
+      <div id="resetStepRequest">
+        <div class="reset-account-card"><span>Аккаунт</span><strong id="resetNick">—</strong><small id="resetEmailMasked">—</small></div>
+        <button id="sendResetCode" class="btn btn-purple full reset-main-btn" type="button">Отправить код</button>
+      </div>
+
+      <form id="resetCodeForm" class="hidden-reset-step">
+        <label class="reset-field"><span>Код из письма</span><input id="resetCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 цифр"></label>
+        <div id="resetCodeError" class="reset-error"></div>
+        <button id="verifyResetCode" class="btn btn-purple full reset-main-btn" type="submit">Подтвердить код</button>
+        <button id="resendResetCode" class="reset-resend" type="button" disabled>Отправить код снова через <strong id="resendTimer">60</strong> сек.</button>
+      </form>
+
+      <form id="resetPasswordForm" class="hidden-reset-step">
+        <label class="reset-field"><span>Новый пароль</span><input id="resetNewPassword" name="new-password" type="password" minlength="8" autocomplete="new-password" placeholder="Минимум 8 символов"></label>
+        <div id="resetPasswordStrength" class="password-strength"><div class="password-strength-head"><span>Надёжность пароля</span><strong id="resetStrengthText">—</strong></div><div class="password-strength-track"><i id="resetStrengthBar"></i></div><small id="resetStrengthHint">Используй 8+ символов, цифры и буквы.</small></div>
+        <label class="reset-field"><span>Повтори новый пароль</span><input id="resetConfirmPassword" name="new-password-confirm" type="password" minlength="8" autocomplete="new-password" placeholder="Повтори пароль"></label>
+        <div id="resetPasswordError" class="reset-error"></div>
+        <button class="btn btn-purple full reset-main-btn" type="submit">Сохранить новый пароль</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="cookieGate" class="cookie-gate" aria-hidden="false">
+    <div class="cookie-gate-panel" role="dialog" aria-modal="true" aria-labelledby="cookieGateTitle">
+      <div id="cookieConsentView">
+        <div class="cookie-icon" aria-hidden="true">🍪</div>
+        <div class="tag">SPACE CLIENT</div>
+        <h2 id="cookieGateTitle">Согласие на обработку cookie</h2>
+        <p>Сайт использует cookie-файлы и технические данные для работы сайта, сохранения настроек, безопасности и улучшения сервиса. Это может включать данные сессии, язык интерфейса и технические параметры устройства.</p>
+        <p class="cookie-note">Чтобы продолжить пользоваться Space Client, необходимо согласиться с использованием cookie-файлов.</p>
+        <div class="cookie-actions">
+          <button id="cookieReject" class="btn btn-dark cookie-reject" type="button">Отклонить</button>
+          <button id="cookieAccept" class="btn btn-purple cookie-accept" type="button" onclick="window.spaceAcceptCookies && window.spaceAcceptCookies(event)">Согласен</button>
+        </div>
+      </div>
+      <div id="cookieRejectedView" class="cookie-rejected hidden">
+        <div class="cookie-rejected-icon">×</div>
+        <div class="tag">SPACE CLIENT</div>
+        <h2>Вы были кикнуты с сайта</h2>
+        <p>Вы должны согласиться с использованием cookie-файлов, прежде чем перейти на сайт. Без согласия доступ к Space Client невозможен.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script>
+(function(){
+  const KEY="space_cookie_consent";
+  const VERSION="1";
+  function accepted(){
+    try { return localStorage.getItem(KEY)===VERSION || document.cookie.split(";").some(c=>c.trim().startsWith(KEY+"=accepted")); }
+    catch(e){ return false; }
+  }
+  function unlock(){
+    document.documentElement.classList.remove("cookie-gate-open");
+    document.body.classList.remove("cookie-gate-open");
+    document.documentElement.style.overflow="";
+    document.body.style.overflow="";
+    document.documentElement.style.removeProperty("touch-action");
+    document.body.style.removeProperty("touch-action");
+  }
+  function hide(){
+    const g=document.getElementById("cookieGate");
+    unlock();
+    if(!g) return;
+    g.classList.add("hidden");
+    g.setAttribute("aria-hidden","true");
+    g.style.pointerEvents="none";
+    // After the animation remove it from hit-testing entirely.
+    setTimeout(()=>{ if(g.classList.contains("hidden")){ g.style.display="none"; } }, 500);
+  }
+  function save(){
+    try { localStorage.setItem(KEY,VERSION); } catch(e) {}
+    try { document.cookie=KEY+"=accepted; Max-Age=315360000; Path=/; SameSite=Lax"; } catch(e) {}
+    hide();
+  }
+  window.spaceAcceptCookies=function(e){
+    try { if(e){e.preventDefault();e.stopPropagation();} } catch(_) {}
+    save();
+    return false;
+  };
+  function showOrHide(){
+    if(accepted()) hide();
+    else {
+      const g=document.getElementById("cookieGate");
+      if(g){ g.style.display="flex"; g.style.pointerEvents="auto"; g.classList.remove("hidden"); }
+      document.documentElement.classList.add("cookie-gate-open");
+      document.body.classList.add("cookie-gate-open");
+    }
+  }
+  // Run immediately, before the main application JS.
+  showOrHide();
+  document.addEventListener("DOMContentLoaded",showOrHide,{once:true});
+  window.addEventListener("pageshow",showOrHide);
+})();
+</script>
+<audio id="ambientAudio" preload="auto" playsinline></audio>
+  <div class="ambient-controls is-hidden" aria-label="Управление фоновой музыкой">
+    <div class="ambient-volume-head">
+      <span>Громкость</span>
+      <strong id="ambientVolumeValue" title="Громкость" tabindex="0" role="button">8%</strong>
+    </div>
+    <div class="ambient-volume-wrap">
+      <input id="ambientVolume" class="ambient-volume" type="range" min="5" max="1000" step="1" value="8" aria-label="Громкость музыки от 5 до 1000 процентов">
+      <span class="ambient-volume-marker" aria-hidden="true"></span>
+      <span class="ambient-volume-marker-label" aria-hidden="true">100%</span>
+    </div>
+    <div class="ambient-volume-scale"><span>5%</span><span>1000%</span></div>
+    <button id="ambientPower" class="ambient-power" type="button">Музыка: включена</button>
+  </div>
+  <button id="ambientToggle" class="ambient-toggle" type="button" aria-label="Открыть управление музыкой" title="Музыка" aria-pressed="false">♫</button>
+  <div id="ambientStatus" class="ambient-status" role="status" aria-live="polite"></div>
+  <script src="download-config.js?v=1"></script>
+<script src="script.js?v=18.10"></script>
+<script>
+(function(){
+  document.documentElement.classList.add('js-reveal-ready');
+  const reveal=()=>{
+    document.querySelectorAll('.reveal').forEach((el)=>{
+      const r=el.getBoundingClientRect();
+      if(r.top < window.innerHeight*0.94 && r.bottom > 0) el.classList.add('visible');
+    });
+  };
+  window.addEventListener('scroll',reveal,{passive:true});
+  window.addEventListener('resize',reveal,{passive:true});
+  requestAnimationFrame(reveal);
+  setTimeout(()=>document.querySelectorAll('.reveal').forEach(el=>el.classList.add('visible')),1200);
+})();
+</script>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  if (params.get('launcher') !== '1') return;
+  const callback = params.get('callback') || '';
+  const nonce = params.get('nonce') || '';
+  let sent = false;
+  async function handoff() {
+    if (sent || !callback || !nonce) return;
+    const token = localStorage.getItem('space_token');
+    if (!token) return;
+    sent = true;
+    try {
+      const r = await fetch((window.SPACECLIENT_API_BASE || '') + '/api/launcher/authorize', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({callback,nonce})});
+      const data = await r.json();
+      if (!r.ok || !data.redirect) throw new Error(data.message || 'Не удалось передать вход в лаунчер.');
+      location.href = data.redirect;
+    } catch (e) {
+      sent = false;
+      const msg = document.querySelector('#authError, .auth-error');
+      if (msg) msg.textContent = e.message;
+      if (typeof toastMsg === 'function') toastMsg(e.message);
+    }
+  }
+  const timer = setInterval(handoff, 500);
+  handoff();
+  window.addEventListener('beforeunload', () => clearInterval(timer));
+})();
+</script>
+</body>
+</html>
