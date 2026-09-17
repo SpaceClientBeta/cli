@@ -1115,3 +1115,14 @@ html,body{
     display: none !important;
   }
 }
+
+/* Полоса-подсказка, когда сайт открыт из Space Client Launcher (?launcher=1). */
+body.launcher-mode::before{
+  content:"Вход для Space Client Launcher — после входа мы автоматически вернём тебя в приложение";
+  position:fixed;top:0;left:0;right:0;z-index:9999;
+  background:linear-gradient(90deg,#3a2460,#6331d8);
+  color:#fff;font-size:12px;font-weight:700;letter-spacing:.3px;
+  text-align:center;padding:9px 14px;
+  box-shadow:0 4px 18px #00000055;
+}
+body.launcher-mode .navbar{top:34px}
