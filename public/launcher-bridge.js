@@ -58,7 +58,7 @@
         if (typeof clearSession === "function") clearSession();
         if (typeof updateAccount === "function") updateAccount();
         if (typeof openModal === "function") { openModal("login"); setLauncherModalCopy(); }
-        if (typeof toastMsg === "function" && e && e.message) toastMsg(e.message);
+        if (typeof toastMsg === "function" && e && e.message) toastMsg(e.message, "error");
       } finally {
         attempting = false;
       }

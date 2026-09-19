@@ -1192,11 +1192,16 @@ body.launcher-mode .navbar{top:34px}
 .skin-confirm-danger{background:rgba(255,93,93,.16)!important;border:1px solid rgba(255,107,107,.55)!important;color:#ffdada!important;font-weight:800!important}
 .skin-confirm-danger:hover{background:rgba(255,93,93,.3)!important}
 
-/* ===== Уведомление «Успешно сохранено»: как в лаунчере (зелёное), но у левого края экрана ===== */
-.toast{position:fixed!important;left:0!important;right:auto!important;top:auto!important;bottom:88px!important;z-index:20000!important;max-width:min(360px,calc(100vw - 20px));display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border:0;border-radius:0 14px 14px 0;background:linear-gradient(135deg,#1c8c50,#34d980);box-shadow:0 22px 60px rgba(0,0,0,.6);pointer-events:none;opacity:0;transform:translate3d(-110%,0,0);transition:opacity .3s ease,transform .4s cubic-bezier(.22,1,.36,1)}
+/* ===== Уведомление: зелёное (успех) / красное (ошибка), у правого края экрана ===== */
+.toast{position:fixed!important;right:0!important;left:auto!important;top:auto!important;bottom:28px!important;z-index:20000!important;max-width:min(360px,calc(100vw - 20px));display:flex;align-items:center;gap:10px;padding:14px 20px 14px 18px;border:0;border-radius:14px 0 0 14px;background:linear-gradient(135deg,#1c8c50,#34d980);box-shadow:0 22px 60px rgba(0,0,0,.6);pointer-events:none;opacity:0;transform:translate3d(110%,0,0);transition:opacity .3s ease,transform .4s cubic-bezier(.22,1,.36,1)}
 .toast:before{display:none}
 .toast.show{opacity:1;transform:translate3d(0,0,0)}
 .toast .toastCheck{background:rgba(255,255,255,.2);box-shadow:none}
 #toastText{color:#fff;font-size:12px;font-weight:800}
-@media(max-width:560px){.toast{bottom:76px!important}}
+@media(max-width:560px){.toast{bottom:20px!important}}
+
+/* Красное уведомление — если что-то не так */
+.toast.error{background:linear-gradient(135deg,#b3261e,#ff5d5d)}
+/* Старые фиолетовые сообщения музыки справа внизу больше не нужны: всё идёт через .toast */
+.ambient-status{display:none!important}
 

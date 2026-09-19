@@ -216,6 +216,23 @@ function json(request, status, body, extraHeaders) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+// Ответ 500 с понятной причиной, если сервер не может нормально работать с Supabase
+// (неверный ключ/адрес, приостановленный проект, нет таблицы). Технические детали
+// наружу не отдаём — полный текст ошибки пишется в логи Worker (console.error).
+function serverError(request, err) {
+  const raw = String((err && (err.message || err.details || err.hint)) || err || '');
+  const low = raw.toLowerCase();
+  let message = 'Внутренняя ошибка сервера.';
+  if (low.includes('invalid api key') || low.includes('invalid jwt') || low.includes('jwt') || low.includes('apikey')) {
+    message = 'Внутренняя ошибка сервера: Supabase не принял ключ. Проверь SUPABASE_SECRET_KEY (нужен secret / service_role, а не anon / publishable).';
+  } else if (low.includes('fetch failed') || low.includes('invalid url') || low.includes('enotfound') || low.includes('failed to fetch') || low.includes('unexpected token') || low.includes('not valid json') || low.includes('network connection lost')) {
+    message = 'Внутренняя ошибка сервера: не удаётся подключиться к Supabase. Проверь SUPABASE_URL (вида https://xxxx.supabase.co) и что проект не приостановлен.';
+  } else if (low.includes('does not exist') || low.includes('schema cache') || low.includes('could not find the table') || low.includes('could not find the')) {
+    message = 'Внутренняя ошибка сервера: в Supabase нет нужной таблицы или колонки. Выполни актуальный supabase.sql в SQL Editor.';
+  }
+  return json(request, 500, { message });
+}
+
 async function readBody(request) {
   const text = await request.text();
   if (!text) return {};
@@ -1749,7 +1766,7 @@ export default {
         return await handleFriendMessages(app, request);
       } catch (err) {
         console.error(err);
-        return json(request, 500, { message: 'Внутренняя ошибка сервера.' });
+        return serverError(request, err);
       }
     }
 
@@ -1775,7 +1792,7 @@ export default {
         return await handleYggProfile(app, request, uuidParam, env);
       } catch (err) {
         console.error(err);
-        return json(request, 500, { message: 'Внутренняя ошибка сервера.' });
+        return serverError(request, err);
       }
     }
 
@@ -1802,7 +1819,7 @@ export default {
         return await match[2](app, request);
       } catch (err) {
         console.error(err);
-        return json(request, 500, { message: 'Внутренняя ошибка сервера.' });
+        return serverError(request, err);
       }
     }
 

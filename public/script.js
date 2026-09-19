@@ -646,16 +646,20 @@ const authBack = document.getElementById("authBack");
 const toast = document.getElementById("toast");
 let toastTimer = null;
 
-function toastMsg(message) {
+// kind: "success" (зелёное, по умолчанию) или "error" (красное — если что-то не так).
+function toastMsg(message, kind) {
   if (!toast) return;
+  const isError = kind === "error";
   const textEl = document.getElementById("toastText");
   if (textEl) textEl.textContent = tr(String(message || ""));
   else toast.textContent = tr(String(message || ""));
-  toast.classList.remove("show");
-  void toast.offsetWidth;
-  toast.classList.add("show");
+  toast.classList.toggle("error", isError);
+  const icon = toast.querySelector(".toastCheck");
+  if (icon) icon.textContent = isError ? "✕" : "✓";
+  // Если плашка уже на экране — просто обновляем текст (без «мигания» при частых сообщениях).
+  if (!toast.classList.contains("show")) { void toast.offsetWidth; toast.classList.add("show"); }
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove("show"), 4200);
+  toastTimer = setTimeout(() => toast.classList.remove("show"), isError ? 5000 : 3200);
 }
 const cabinetOpen = document.getElementById("cabinetOpen");
 const cabinetModal = document.getElementById("cabinetModal");
@@ -1258,7 +1262,7 @@ async function openCabinet() {
     updateAccount();
     loadProfileExtras(user);
   } catch (e) {
-    clearSession(); updateAccount(); toastMsg(tr(e.message || "Не удалось загрузить профиль."));
+    clearSession(); updateAccount(); toastMsg(tr(e.message || "Не удалось загрузить профиль."), "error");
   }
 }
 
@@ -1442,7 +1446,7 @@ async function uploadTexture(type, file) {
     if (lastSkinData) lastSkinData = { ...lastSkinData, [type === "skin" ? "hasSkin" : "hasCape"]: true };
     refreshSkinPreview();
   } catch (e) {
-    if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить файл.");
+    toastMsg(e.message || "Не удалось загрузить файл.", "error");
   }
 }
 
@@ -1463,7 +1467,7 @@ async function applyDefaultSkin(model) {
     toastMsg("Успешно сохранено");
     refreshSkinPreview();
   } catch (e) {
-    if (errBox) errBox.textContent = tr(e.message || "Не удалось сохранить.");
+    toastMsg(e.message || "Не удалось сохранить.", "error");
   }
 }
 // Окно «Вы уверены?»: показывается, только если сейчас стоит СВОЙ загруженный скин
@@ -1512,7 +1516,7 @@ document.getElementById("capeDeleteBtn")?.addEventListener("click", async () => 
     toastMsg("Успешно сохранено");
     if (lastSkinData) lastSkinData = { ...lastSkinData, hasCape: false };
     refreshSkinPreview();
-  } catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось удалить плащ."); }
+  } catch (e) { toastMsg(e.message || "Не удалось удалить плащ.", "error"); }
 });
 // «О себе» сохраняется само: через ~1 сек после последнего символа и при выходе из поля.
 async function saveBioAuto() {
@@ -1522,7 +1526,7 @@ async function saveBioAuto() {
   const bio = input.value || "";
   if (bio === bioLastSaved) return;
   try { await apiFetch("/api/profile/bio", { method: "POST", body: JSON.stringify({ bio }) }); bioLastSaved = bio; toastMsg("Успешно сохранено"); }
-  catch (e) { toastMsg(tr(e.message || "Не удалось сохранить.")); }
+  catch (e) { toastMsg(tr(e.message || "Не удалось сохранить."), "error"); }
 }
 document.getElementById("profileBioInput")?.addEventListener("input", () => { clearTimeout(bioSaveTimer); bioSaveTimer = setTimeout(saveBioAuto, 1200); });
 document.getElementById("profileBioInput")?.addEventListener("blur", saveBioAuto);
@@ -1555,7 +1559,7 @@ function updateBottomDownloadGate(){
 
 function downloadClient(){
   if(!getSession()){
-    toastMsg(tr('Войдите или зарегистрируйтесь, чтобы скачать Space Client.'));
+    toastMsg(tr('Войдите или зарегистрируйтесь, чтобы скачать Space Client.'), "error");
     openModal('login');
     return;
   }
@@ -1563,7 +1567,7 @@ function downloadClient(){
   // Прямая ссылка на EXE в Cloudflare Worker, без промежуточного скачивания с сайта.
   const DIRECT_EXE_URL = String(window.SPACECLIENT_DOWNLOAD_URL || '').trim();
   if (!/^https?:\/\//i.test(DIRECT_EXE_URL)) {
-    toastMsg('Ссылка на скачивание EXE не настроена (public/download-config.js).');
+    toastMsg('Ссылка на скачивание EXE не настроена (public/download-config.js).', "error");
     return;
   }
   a.href = DIRECT_EXE_URL;
@@ -1641,7 +1645,7 @@ async function openAdmin() {
   if (!isAdmin()) return;
 
   const session = getSession();
-  if (!session) { toastMsg("Сначала войдите под аккаунтом администратора."); return; }
+  if (!session) { toastMsg("Сначала войдите под аккаунтом администратора.", "error"); return; }
 
   adminNickSearch.value = "";
   adminSelectedEmail = "";
@@ -2069,7 +2073,7 @@ async function sendResetRequest(isResend = false) {
     resetCode.focus();
     toastMsg("Код отправлен на почту.");
   } catch (error) {
-    toastMsg(tr(error.message || "Не удалось отправить код."));
+    toastMsg(tr(error.message || "Не удалось отправить код."), "error");
     if (isResend) resendResetCode.disabled = false;
     else sendResetCode.disabled = false;
   } finally {
@@ -2190,15 +2194,10 @@ resetPasswordForm.addEventListener("submit", async (event) => {
   let playlistLoaded=false;
   let loadingPlaylist=null;
 
-  function statusMsg(msg,on=enabled){
-    if(!status)return;
-    status.textContent=msg;
-    status.classList.remove('on','off','show');
-    status.classList.add(on?'on':'off');
-    void status.offsetWidth;
-    status.classList.add('show');
-    clearTimeout(statusTimer);
-    statusTimer=setTimeout(()=>status.classList.remove('show'),2600);
+  // Сообщения музыки — тем же зелёным/красным уведомлением, что и всё остальное.
+  // on=false — проблема (красное), kind можно задать явно.
+  function statusMsg(msg,on=enabled,kind){
+    toastMsg(msg, kind || (on ? 'success' : 'error'));
   }
 
   function ensureGraph(){
@@ -2297,7 +2296,7 @@ resetPasswordForm.addEventListener("submit", async (event) => {
   function stopMusic(show=true){
     audio.pause();
     audio.muted=true;
-    if(show)statusMsg(tr('Музыка отключена'),false);
+    if(show)statusMsg(tr('Музыка отключена'),false,'success');
   }
 
   function openPanel(){ panel.classList.remove('is-hidden'); toggle.classList.add('panel-open'); syncPower(); }
