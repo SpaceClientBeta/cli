@@ -232,7 +232,6 @@
               <button type="button" id="capeUploadBtn" class="btn skin-action-btn">Загрузить плащ</button>
             </div>
             <div class="skin-buttons-row">
-              <button type="button" id="skinResetBtn" class="btn skin-action-btn">Скин по умолчанию</button>
               <button type="button" id="capeDeleteBtn" class="btn skin-action-btn skin-action-btn-danger">Удалить плащ</button>
             </div>
             <div id="skinsError" class="form-error"></div>
@@ -423,7 +422,7 @@
     <div class="skin-confirm-window">
       <div class="skin-confirm-icon">!</div>
       <h3 id="skinConfirmTitle">Вы уверены, что хотите сменить скин?</h3>
-      <p class="skin-confirm-warn">Ваш загруженный скин будет удалён.</p>
+      <p class="skin-confirm-warn" id="skinConfirmWarn">Ваш загруженный скин будет удалён.</p>
       <div class="skin-confirm-actions">
         <button type="button" id="skinConfirmCancel" class="btn btn-dark">Отмена</button>
         <button type="button" id="skinConfirmOk" class="btn skin-confirm-danger">Да, сменить</button>
@@ -501,7 +500,7 @@
   <div id="ambientStatus" class="ambient-status" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/skinview3d@3.1.0/bundles/skinview3d.bundle.js"></script>
   <script src="download-config.js?v=2"></script>
-<script src="script.js?v=18.14"></script>
+<script src="script.js?v=18.15"></script>
 <script src="launcher-bridge.js?v=1"></script>
 <script>
 (function(){

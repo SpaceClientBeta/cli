@@ -1439,7 +1439,7 @@ async function uploadTexture(type, file) {
     const model = type === "skin" ? await detectSkinModel(imageBase64) : (lastSkinData?.model === "slim" ? "slim" : "classic");
     await apiFetch("/api/skins/upload", { method: "POST", body: JSON.stringify({ type, imageBase64, model }) });
     toastMsg("Успешно сохранено");
-    if (type === "skin" && lastSkinData) lastSkinData = { ...lastSkinData, hasSkin: true };
+    if (lastSkinData) lastSkinData = { ...lastSkinData, [type === "skin" ? "hasSkin" : "hasCape"]: true };
     refreshSkinPreview();
   } catch (e) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить файл.");
@@ -1474,10 +1474,14 @@ function closeSkinConfirm(result) {
   const r = skinConfirmResolve; skinConfirmResolve = null;
   if (r) r(result);
 }
-function confirmSkinDelete() {
+// Универсальное окно «Вы уверены?» (скин / плащ): заголовок, красное предупреждение, кнопка.
+function askConfirm(title, warn, okText) {
   const box = document.getElementById("skinConfirm");
   if (!box) return Promise.resolve(true);
   if (skinConfirmResolve) closeSkinConfirm(false);
+  document.getElementById("skinConfirmTitle").textContent = title;
+  document.getElementById("skinConfirmWarn").textContent = warn;
+  document.getElementById("skinConfirmOk").textContent = okText;
   return new Promise((resolve) => {
     skinConfirmResolve = resolve;
     box.classList.add("open");
@@ -1493,20 +1497,22 @@ document.addEventListener("keydown", (e) => {
   }
 }, true);
 async function requestDefaultSkin(model) {
-  if (lastSkinData?.hasSkin && !(await confirmSkinDelete())) return;
+  if (lastSkinData?.hasSkin && !(await askConfirm("Вы уверены, что хотите сменить скин?", "Ваш загруженный скин будет удалён.", "Да, сменить"))) return;
   applyDefaultSkin(model);
 }
 document.querySelectorAll(".default-skin-btn").forEach((btn) => {
   btn.addEventListener("click", () => requestDefaultSkin(btn.dataset.defaultModel === "slim" ? "slim" : "classic"));
 });
-// «Скин по умолчанию»: убирает свой скин; если уже стоял Alex — остаётся Alex, иначе Steve.
-document.getElementById("skinResetBtn")?.addEventListener("click", () => {
-  const keepAlex = lastSkinData && !lastSkinData.hasSkin && lastSkinData.model === "slim";
-  requestDefaultSkin(keepAlex ? "slim" : "classic");
-});
+// Удаление плаща — тоже с подтверждением. Если плаща и так нет, ничего не делаем.
 document.getElementById("capeDeleteBtn")?.addEventListener("click", async () => {
-  try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "cape" }) }); toastMsg("Успешно сохранено"); refreshSkinPreview(); }
-  catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось удалить плащ."); }
+  if (lastSkinData && !lastSkinData.hasCape) return;
+  if (!(await askConfirm("Вы уверены, что хотите удалить плащ?", "Ваш плащ будет удалён.", "Да, удалить"))) return;
+  try {
+    await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "cape" }) });
+    toastMsg("Успешно сохранено");
+    if (lastSkinData) lastSkinData = { ...lastSkinData, hasCape: false };
+    refreshSkinPreview();
+  } catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось удалить плащ."); }
 });
 // «О себе» сохраняется само: через ~1 сек после последнего символа и при выходе из поля.
 async function saveBioAuto() {
