@@ -1193,7 +1193,7 @@ body.launcher-mode .navbar{top:34px}
 .skin-confirm-danger:hover{background:rgba(255,93,93,.3)!important}
 
 /* ===== Уведомление: зелёное (успех) / красное (ошибка), у правого края экрана ===== */
-.toast{position:fixed!important;right:0!important;left:auto!important;top:auto!important;bottom:28px!important;z-index:20000!important;max-width:min(360px,calc(100vw - 20px));display:flex;align-items:center;gap:10px;padding:14px 20px 14px 18px;border:0;border-radius:14px 0 0 14px;background:linear-gradient(135deg,#1c8c50,#34d980);box-shadow:0 22px 60px rgba(0,0,0,.6);pointer-events:none;opacity:0;transform:translate3d(110%,0,0);transition:opacity .3s ease,transform .4s cubic-bezier(.22,1,.36,1)}
+.toast{position:fixed!important;right:0!important;left:auto!important;top:auto!important;bottom:96px!important;z-index:20000!important;max-width:min(360px,calc(100vw - 20px));display:flex;align-items:center;gap:10px;padding:14px 20px 14px 18px;border:0;border-radius:14px 0 0 14px;background:linear-gradient(135deg,#1c8c50,#34d980);box-shadow:0 22px 60px rgba(0,0,0,.6);pointer-events:none;opacity:0;transform:translate3d(110%,0,0);transition:opacity .3s ease,transform .4s cubic-bezier(.22,1,.36,1)}
 .toast:before{display:none}
 .toast.show{opacity:1;transform:translate3d(0,0,0)}
 .toast .toastCheck{background:rgba(255,255,255,.2);box-shadow:none}
@@ -1204,4 +1204,8 @@ body.launcher-mode .navbar{top:34px}
 .toast.error{background:linear-gradient(135deg,#b3261e,#ff5d5d)}
 /* Старые фиолетовые сообщения музыки справа внизу больше не нужны: всё идёт через .toast */
 .ambient-status{display:none!important}
+
+/* Скрываем полосу прокрутки в окнах (кабинет и др.) — прокручивается колесом/тачем как раньше */
+.modal,.modal-window,.cabinet-window,.admin-window,.friends-window,.reset-window,.delete-window,.edit-profile-window{scrollbar-width:none!important;-ms-overflow-style:none!important}
+.modal::-webkit-scrollbar,.modal-window::-webkit-scrollbar,.cabinet-window::-webkit-scrollbar,.admin-window::-webkit-scrollbar,.friends-window::-webkit-scrollbar,.reset-window::-webkit-scrollbar,.delete-window::-webkit-scrollbar,.edit-profile-window::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
 
