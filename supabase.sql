@@ -270,3 +270,61 @@ alter table public.password_resets enable row level security;
 revoke all on table public.password_resets from anon, authenticated;
 comment on table public.password_resets is
   'Password-reset codes/cooldowns. Accessed only by the Worker with the Supabase secret/service-role key.';
+
+
+-- ============================================================================
+-- Профиль: описание "о себе", суммарное время в игре, стабильный UUID игрока
+-- (нужен для игрового скин-сервера — Minecraft-профиль привязан к UUID).
+-- ============================================================================
+alter table public.accounts add column if not exists bio text;
+alter table public.accounts add column if not exists playtime_seconds bigint not null default 0;
+alter table public.accounts add column if not exists uuid text unique;
+
+-- Скины и плащи. Храним сам PNG как base64 прямо в строке — простое решение,
+-- не требующее отдельного object storage. skin_png/cape_png = null означает
+-- "стандартный скин Steve/Alex" / "плаща нет".
+create table if not exists public.skins (
+  email text primary key references public.accounts(email) on delete cascade,
+  skin_png text,
+  skin_model text not null default 'classic' check (skin_model in ('classic','slim')),
+  cape_png text,
+  updated_at timestamptz not null default now()
+);
+alter table public.skins enable row level security;
+revoke all on table public.skins from anon, authenticated;
+comment on table public.skins is
+  'Skin/cape PNGs (base64). Accessed only by the Worker with the Supabase secret/service-role key.';
+
+-- ============================================================================
+-- Игровой скин-сервер (Yggdrasil-совместимый API для authlib-injector).
+-- Позволяет ванильному Minecraft-клиенту показывать кастомные скины/плащи
+-- без модификации самого клиента — стандартный способ для клиентов с
+-- собственной системой аккаунтов (не Microsoft/Mojang).
+-- ============================================================================
+
+-- Игровые (Minecraft) токены доступа — отдельные от сессий сайта/лаунчера.
+-- Выдаются лаунчером перед запуском игры через /api/launcher/mc-auth.
+create table if not exists public.mc_sessions (
+  token_hash text primary key,
+  client_token text not null,
+  email text not null,
+  uuid text not null,
+  nick text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists mc_sessions_email_idx on public.mc_sessions (email);
+create index if not exists mc_sessions_uuid_idx on public.mc_sessions (uuid);
+alter table public.mc_sessions enable row level security;
+revoke all on table public.mc_sessions from anon, authenticated;
+
+-- Краткоживущие записи "игрок зашёл на сервер" — для проверки hasJoined,
+-- если у вас есть собственный Minecraft-сервер (multiplayer). Для показа
+-- своего скина в одиночной игре/на экране никнейма эта таблица не нужна.
+create table if not exists public.mc_joins (
+  join_key text primary key,
+  uuid text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists mc_joins_created_idx on public.mc_joins (created_at);
+alter table public.mc_joins enable row level security;
+revoke all on table public.mc_joins from anon, authenticated;
