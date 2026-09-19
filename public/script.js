@@ -1291,6 +1291,9 @@ let lastSkinData = null;
 // стартовый угол для 3D (дальше уже крутит пользователь) — оба режима
 // стартуют с одного и того же угла, поэтому смотрят в одну сторону.
 const SKIN_POSE_ANGLE = 0.55;
+// Скины по умолчанию: classic = Steve, slim = Alex. Пока свой скин не загружен,
+// поле model в базе означает, какой из двух стандартных выбран. Оба файла в
+// assets/skins рисуются с обычными (4px) руками, поэтому arms всегда "default".
 const DEFAULT_SKIN_URLS = { classic: "assets/skins/steve.png", slim: "assets/skins/alex.png" };
 // Плавная анимация "живого" скина: лёгкий поворот головы туда-сюда +
 // покачивание рук/плаща (как обычный Idle из skinview3d, но объединённое в
@@ -1308,9 +1311,13 @@ function createLivelyAnimation() {
   });
 }
 
+let bioLastSaved = "";
+let bioSaveTimer = null;
+
 function loadProfileExtras(user) {
   const bioInput = document.getElementById("profileBioInput");
   if (bioInput) bioInput.value = user.bio || "";
+  bioLastSaved = user.bio || "";
   const playEl = document.getElementById("profilePlaytime");
   if (playEl) playEl.textContent = `Наиграно: ${formatPlaytime(user.playtimeSeconds)}`;
   refreshSkinPreview();
@@ -1322,9 +1329,8 @@ async function refreshSkinPreview() {
   try {
     const data = await apiFetch("/api/skins/me");
     const model = data.model || "classic";
-    const modelSelect = document.getElementById("skinModelSelect");
-    if (modelSelect) modelSelect.value = model;
     lastSkinData = data;
+    updateDefaultSkinButtons(data);
     applySkinToViewers(data.skinUrl, data.capeUrl, model);
   } catch (e) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить скин.");
@@ -1334,12 +1340,10 @@ async function refreshSkinPreview() {
 function applySkinToViewers(skinUrl, capeUrl, model) {
   ensureSkinViewer();
   if (!skinViewer) return;
-  // Если свой скин не загружен — всегда грузим настоящего Стива (а не
-  // Алекса и не иконку сайта): раньше при skinUrl=null подставлялась
-  // favicon.svg, а модель могла взять Алекса по сохранённому типу модели.
-  // Свой загруженный скин при этом всегда остаётся как есть.
-  const url = skinUrl || DEFAULT_SKIN_URLS.classic;
-  skinViewer.loadSkin(url, { model: skinUrl ? (model === "slim" ? "slim" : "default") : "default" });
+  // Свой скин — как есть (с определённым типом рук). Иначе — выбранный
+  // стандартный: Steve (classic) или Alex (slim).
+  if (skinUrl) skinViewer.loadSkin(skinUrl, { model: model === "slim" ? "slim" : "default" });
+  else skinViewer.loadSkin(DEFAULT_SKIN_URLS[model === "slim" ? "slim" : "classic"], { model: "default" });
   if (capeUrl) skinViewer.loadCape(capeUrl); else skinViewer.resetCape?.();
 }
 
@@ -1384,18 +1388,39 @@ function setSkinViewMode(mode) {
 }
 document.getElementById("skinView2D")?.addEventListener("click", () => setSkinViewMode("2d"));
 document.getElementById("skinView3D")?.addEventListener("click", () => setSkinViewMode("3d"));
-document.getElementById("skinSaveBtn")?.addEventListener("click", async () => {
-  const errBox = document.getElementById("skinsError");
-  if (errBox) errBox.textContent = "";
-  const model = document.getElementById("skinModelSelect")?.value === "slim" ? "slim" : "classic";
-  try {
-    await apiFetch("/api/skins/model", { method: "POST", body: JSON.stringify({ model }) });
-    toastMsg("Успешно сохранено");
-    refreshSkinPreview();
-  } catch (e) {
-    if (errBox) errBox.textContent = tr(e.message || "Не удалось сохранить.");
-  }
-});
+// Подсветка выбранного стандартного скина (только если свой скин не загружен).
+function updateDefaultSkinButtons(data) {
+  const usingDefault = !!data && !(data.hasSkin ?? !!data.skinUrl);
+  const model = data?.model === "slim" ? "slim" : "classic";
+  document.querySelectorAll(".default-skin-btn").forEach((btn) => {
+    btn.classList.toggle("active", usingDefault && btn.dataset.defaultModel === model);
+  });
+}
+
+// Определяет тип рук загруженного скина: у "тонких" (Alex) рук крайние
+// столбцы текстуры руки пустые. Так отдельный выбор модели рук не нужен.
+function detectSkinModel(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        if (img.width !== 64 || img.height !== 64) return resolve("classic");
+        const canvas = document.createElement("canvas");
+        canvas.width = 64; canvas.height = 64;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        const empty = (x, y, w, h) => {
+          const d = ctx.getImageData(x, y, w, h).data;
+          for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+          return true;
+        };
+        resolve(empty(54, 20, 2, 12) && empty(50, 16, 2, 4) ? "slim" : "classic");
+      } catch { resolve("classic"); }
+    };
+    img.onerror = () => resolve("classic");
+    img.src = dataUrl;
+  });
+}
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1411,9 +1436,9 @@ async function uploadTexture(type, file) {
   if (errBox) errBox.textContent = "";
   try {
     const imageBase64 = await readFileAsDataUrl(file);
-    const model = document.getElementById("skinModelSelect")?.value === "slim" ? "slim" : "classic";
+    const model = type === "skin" ? await detectSkinModel(imageBase64) : (lastSkinData?.model === "slim" ? "slim" : "classic");
     await apiFetch("/api/skins/upload", { method: "POST", body: JSON.stringify({ type, imageBase64, model }) });
-    toastMsg(type === "cape" ? "Плащ загружен" : "Скин загружен");
+    toastMsg("Успешно сохранено");
     refreshSkinPreview();
   } catch (e) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить файл.");
@@ -1428,19 +1453,42 @@ document.getElementById("skinFileInput")?.addEventListener("change", (e) => {
 document.getElementById("capeFileInput")?.addEventListener("change", (e) => {
   const file = e.target.files?.[0]; if (file) uploadTexture("cape", file); e.target.value = "";
 });
-document.getElementById("skinResetBtn")?.addEventListener("click", async () => {
-  try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "skin" }) }); toastMsg("Скин сброшен"); refreshSkinPreview(); }
-  catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось сбросить скин."); }
+// Выбор стандартного скина (Steve/Alex) — сохраняется сразу, без кнопки «Сохранить».
+async function applyDefaultSkin(model) {
+  const errBox = document.getElementById("skinsError");
+  if (errBox) errBox.textContent = "";
+  try {
+    await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "skin", model }) });
+    toastMsg("Успешно сохранено");
+    refreshSkinPreview();
+  } catch (e) {
+    if (errBox) errBox.textContent = tr(e.message || "Не удалось сохранить.");
+  }
+}
+document.querySelectorAll(".default-skin-btn").forEach((btn) => {
+  btn.addEventListener("click", () => applyDefaultSkin(btn.dataset.defaultModel === "slim" ? "slim" : "classic"));
+});
+// «Скин по умолчанию»: убирает свой скин; если уже стоял Alex — остаётся Alex, иначе Steve.
+document.getElementById("skinResetBtn")?.addEventListener("click", () => {
+  const keepAlex = lastSkinData && !lastSkinData.hasSkin && lastSkinData.model === "slim";
+  applyDefaultSkin(keepAlex ? "slim" : "classic");
 });
 document.getElementById("capeDeleteBtn")?.addEventListener("click", async () => {
-  try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "cape" }) }); toastMsg("Плащ удалён"); refreshSkinPreview(); }
+  try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "cape" }) }); toastMsg("Успешно сохранено"); refreshSkinPreview(); }
   catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось удалить плащ."); }
 });
-document.getElementById("profileBioSave")?.addEventListener("click", async () => {
-  const bio = document.getElementById("profileBioInput")?.value || "";
-  try { await apiFetch("/api/profile/bio", { method: "POST", body: JSON.stringify({ bio }) }); toastMsg("Успешно сохранено"); }
+// «О себе» сохраняется само: через ~1 сек после последнего символа и при выходе из поля.
+async function saveBioAuto() {
+  clearTimeout(bioSaveTimer);
+  const input = document.getElementById("profileBioInput");
+  if (!input) return;
+  const bio = input.value || "";
+  if (bio === bioLastSaved) return;
+  try { await apiFetch("/api/profile/bio", { method: "POST", body: JSON.stringify({ bio }) }); bioLastSaved = bio; toastMsg("Успешно сохранено"); }
   catch (e) { toastMsg(tr(e.message || "Не удалось сохранить.")); }
-});
+}
+document.getElementById("profileBioInput")?.addEventListener("input", () => { clearTimeout(bioSaveTimer); bioSaveTimer = setTimeout(saveBioAuto, 1200); });
+document.getElementById("profileBioInput")?.addEventListener("blur", saveBioAuto);
 
 
 /* ===== Free client actions / safe initialization ===== */

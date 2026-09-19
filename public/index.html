@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0710">
   <title>Space Client</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <link rel="stylesheet" href="style.css?v=18.19">
+  <link rel="stylesheet" href="style.css?v=18.20">
 </head>
 <body>
   <div class="stars"></div>
@@ -219,24 +219,21 @@
             <canvas id="skinViewerCanvas" width="220" height="280"></canvas>
           </div>
           <div class="skins-controls">
-            <label class="skin-field"><span>Модель рук</span>
-              <select id="skinModelSelect">
-                <option value="classic">Обычная (Steve)</option>
-                <option value="slim">Тонкая (Alex)</option>
-              </select>
-            </label>
+            <div class="skin-field"><span>Скины по умолчанию</span>
+              <div class="default-skin-choice" role="group" aria-label="Скины по умолчанию">
+                <button type="button" id="defaultSkinSteve" class="default-skin-btn default-skin-steve" data-default-model="classic"><span>Steve</span></button>
+                <button type="button" id="defaultSkinAlex" class="default-skin-btn default-skin-alex" data-default-model="slim"><span>Alex</span></button>
+              </div>
+            </div>
             <input type="file" id="skinFileInput" accept="image/png" class="hidden">
             <input type="file" id="capeFileInput" accept="image/png" class="hidden">
             <div class="skin-buttons-row">
               <button type="button" id="skinUploadBtn" class="btn skin-action-btn">Загрузить скин</button>
-              <button type="button" id="skinResetBtn" class="btn skin-action-btn">Скин по умолчанию</button>
-            </div>
-            <div class="skin-buttons-row">
               <button type="button" id="capeUploadBtn" class="btn skin-action-btn">Загрузить плащ</button>
-              <button type="button" id="capeDeleteBtn" class="btn skin-action-btn skin-action-btn-danger">Удалить плащ</button>
             </div>
             <div class="skin-buttons-row">
-              <button type="button" id="skinSaveBtn" class="btn skin-action-btn skin-action-btn-primary">Сохранить</button>
+              <button type="button" id="skinResetBtn" class="btn skin-action-btn">Скин по умолчанию</button>
+              <button type="button" id="capeDeleteBtn" class="btn skin-action-btn skin-action-btn-danger">Удалить плащ</button>
             </div>
             <div id="skinsError" class="form-error"></div>
           </div>
@@ -247,7 +244,6 @@
         <textarea id="profileBioInput" maxlength="400" placeholder="Расскажи немного о себе..."></textarea>
         <div class="profile-bio-row">
           <span id="profilePlaytime" class="profile-playtime">Наиграно: —</span>
-          <button type="button" id="profileBioSave" class="btn btn-dark">Сохранить</button>
         </div>
       </div>
       </div>
@@ -492,7 +488,7 @@
   <div id="ambientStatus" class="ambient-status" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/skinview3d@3.1.0/bundles/skinview3d.bundle.js"></script>
   <script src="download-config.js?v=2"></script>
-<script src="script.js?v=18.12"></script>
+<script src="script.js?v=18.13"></script>
 <script src="launcher-bridge.js?v=1"></script>
 <script>
 (function(){

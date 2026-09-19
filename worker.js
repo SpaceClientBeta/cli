@@ -1474,9 +1474,9 @@ async function handleSkinsUpload(app, request) {
   return json(request, 200, { ok: true });
 }
 
-// Сохраняет только выбранную модель рук (classic/slim) без переливания
-// самой текстуры — нужно для кнопки "Сохранить" в кабинете, когда человек
-// просто переключил Steve/Alex, не загружая новый скин.
+// Сохраняет только skin_model (classic/slim) без переливания самой текстуры.
+// Сейчас сайт и лаунчер пользуются /api/skins/reset с полем model, этот
+// маршрут оставлен для совместимости со старыми версиями лаунчера.
 async function handleSkinsModel(app, request) {
   if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
   const account = await app.requireUser();
@@ -1494,7 +1494,11 @@ async function handleSkinsReset(app, request) {
   const body = await readBody(request);
   const type = body.type === 'cape' ? 'cape' : body.type === 'skin' ? 'skin' : null;
   if (!type) return json(request, 400, { message: 'Некорректный тип текстуры.' });
-  await app.upsertSkins(account.email, type === 'skin' ? { skin_png: null } : { cape_png: null });
+  // Для скина можно передать model: 'classic' = Steve, 'slim' = Alex — какой из
+  // стандартных скинов выбрать вместо своего. Без model выбор не меняется.
+  const patch = type === 'skin' ? { skin_png: null } : { cape_png: null };
+  if (type === 'skin' && (body.model === 'slim' || body.model === 'classic')) patch.skin_model = body.model;
+  await app.upsertSkins(account.email, patch);
   return json(request, 200, { ok: true });
 }
 
@@ -1619,12 +1623,12 @@ async function handleYggProfile(app, request, uuidParam, env) {
     signatureRequired: !unsigned,
     textures: {}
   };
-  // Скин отдаём игре всегда: свой, если он загружен, иначе — дефолтный
-  // Стив (а не пусто и не Алекс). Раньше при отсутствии своего скина/плаща
-  // textures вообще не отправлялись, и сам Minecraft выбирал Стива/Алекса
-  // по хэшу UUID — из-за этого мог показываться Алекс вместо Стива.
+  // Скин отдаём игре всегда: свой, если он загружен, иначе — выбранный
+  // стандартный: Steve (skin_model = 'classic') или Alex ('slim'). Оба файла
+  // в assets/skins нарисованы с обычными руками, поэтому для них metadata не
+  // нужна; тонкие руки (slim) — только у своего загруженного скина.
   texturesPayload.textures.SKIN = {
-    url: urls.skinUrl || `${origin}/assets/skins/steve.png`,
+    url: urls.skinUrl || `${origin}/assets/skins/${skins.skin_model === 'slim' ? 'alex' : 'steve'}.png`,
     metadata: (urls.skinUrl && skins.skin_model === 'slim') ? { model: 'slim' } : undefined
   };
   if (urls.capeUrl) texturesPayload.textures.CAPE = { url: urls.capeUrl };
