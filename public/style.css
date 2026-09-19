@@ -1126,3 +1126,24 @@ body.launcher-mode::before{
   box-shadow:0 4px 18px #00000055;
 }
 body.launcher-mode .navbar{top:34px}
+.skins-panel{margin:22px 0;padding:20px;border:1px solid rgba(255,255,255,.07);border-radius:18px;background:rgba(255,255,255,.02)}
+.skins-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.skins-view-toggle{display:flex;gap:6px;padding:3px;border-radius:10px;background:rgba(255,255,255,.04)}
+.view-toggle-btn{border:0;background:transparent;color:#8b8295;font:inherit;font-size:11px;font-weight:800;padding:7px 14px;border-radius:8px;cursor:pointer;transition:.18s}
+.view-toggle-btn.active{background:rgba(151,110,255,.22);color:#fff}
+.skins-body{display:flex;gap:22px;flex-wrap:wrap}
+.skin-viewer-wrap{width:220px;height:280px;border-radius:14px;background:radial-gradient(ellipse at 50% 20%,#8c5cff1a,transparent 70%),#0b0810;border:1px solid rgba(255,255,255,.08);display:grid;place-items:center;overflow:hidden;flex:0 0 auto}
+.skin-viewer-wrap canvas{width:100%;height:100%;cursor:grab}
+.skin-viewer-wrap canvas:active{cursor:grabbing}
+.skin-2d-preview{width:128px;height:128px;image-rendering:pixelated;filter:drop-shadow(0 10px 30px rgba(0,0,0,.4))}
+.skins-controls{flex:1;min-width:220px;display:flex;flex-direction:column;gap:12px}
+.skin-field{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#8b8295}
+.skin-field select{padding:11px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(7,5,11,.78);color:#fff;outline:none}
+.skin-buttons-row{display:flex;gap:10px;flex-wrap:wrap}
+.skin-buttons-row .btn{flex:1;min-width:140px}
+.profile-bio{margin:0 0 22px;padding:20px;border:1px solid rgba(255,255,255,.07);border-radius:18px;background:rgba(255,255,255,.02);display:flex;flex-direction:column;gap:10px}
+.profile-bio>span{color:#756c80;font-size:10px;text-transform:uppercase;letter-spacing:1.5px}
+.profile-bio textarea{width:100%;min-height:70px;resize:vertical;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(7,5,11,.78);color:#fff;font:inherit;outline:none}
+.profile-bio-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.profile-playtime{font-size:11px;color:#a08fd1;font-weight:700}
+@media(max-width:560px){.skins-body{flex-direction:column;align-items:center}}

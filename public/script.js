@@ -1253,10 +1253,128 @@ async function openCabinet() {
     updateProfileActivity(user.lastSeen);
     cabinetModal.classList.remove("hidden", "cabinet-closing");
     updateAccount();
+    loadProfileExtras(user);
   } catch (e) {
     clearSession(); updateAccount(); toastMsg(tr(e.message || "Не удалось загрузить профиль."));
   }
 }
+
+/* ===== Скины, плащ, "о себе", наигранное время ===== */
+
+function formatPlaytime(totalSeconds) {
+  const s = Math.max(0, Number(totalSeconds) || 0);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h <= 0 && m <= 0) return "меньше минуты";
+  const parts = [];
+  if (h > 0) parts.push(`${h} ч`);
+  parts.push(`${m} мин`);
+  return parts.join(" ");
+}
+
+let skinViewer = null;
+let currentSkinMode = "2d";
+
+function loadProfileExtras(user) {
+  const bioInput = document.getElementById("profileBioInput");
+  if (bioInput) bioInput.value = user.bio || "";
+  const playEl = document.getElementById("profilePlaytime");
+  if (playEl) playEl.textContent = `Наиграно: ${formatPlaytime(user.playtimeSeconds)}`;
+  refreshSkinPreview();
+}
+
+async function refreshSkinPreview() {
+  const errBox = document.getElementById("skinsError");
+  if (errBox) errBox.textContent = "";
+  try {
+    const data = await apiFetch("/api/skins/me");
+    const modelSelect = document.getElementById("skinModelSelect");
+    if (modelSelect) modelSelect.value = data.model || "classic";
+    applySkinToViewers(data.skinUrl, data.capeUrl, data.model || "classic");
+  } catch (e) {
+    if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить скин.");
+  }
+}
+
+function applySkinToViewers(skinUrl, capeUrl, model) {
+  const img2d = document.getElementById("skin2dPreview");
+  if (img2d) img2d.src = skinUrl || "assets/favicon.svg";
+  if (currentSkinMode === "3d" && window.skinview3d) {
+    ensureSkinViewer();
+    if (skinViewer) {
+      if (skinUrl) skinViewer.loadSkin(skinUrl, { model: model === "slim" ? "slim" : "default" });
+      else skinViewer.resetSkin?.();
+      if (capeUrl) skinViewer.loadCape(capeUrl); else skinViewer.resetCape?.();
+    }
+  }
+}
+
+function ensureSkinViewer() {
+  if (skinViewer || !window.skinview3d) return;
+  const canvas = document.getElementById("skinViewerCanvas");
+  if (!canvas) return;
+  skinViewer = new window.skinview3d.SkinViewer({ canvas, width: 220, height: 280 });
+  skinViewer.autoRotate = false;
+  skinViewer.controls.enableZoom = true;
+  skinViewer.zoom = 0.9;
+  if (window.skinview3d.WalkingAnimation) skinViewer.animation = new window.skinview3d.WalkingAnimation();
+}
+
+function setSkinViewMode(mode) {
+  currentSkinMode = mode;
+  document.getElementById("skinView2D")?.classList.toggle("active", mode === "2d");
+  document.getElementById("skinView3D")?.classList.toggle("active", mode === "3d");
+  document.getElementById("skin2dPreview")?.classList.toggle("hidden", mode !== "2d");
+  document.getElementById("skinViewerCanvas")?.classList.toggle("hidden", mode !== "3d");
+  if (mode === "3d") refreshSkinPreview();
+}
+document.getElementById("skinView2D")?.addEventListener("click", () => setSkinViewMode("2d"));
+document.getElementById("skinView3D")?.addEventListener("click", () => setSkinViewMode("3d"));
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadTexture(type, file) {
+  const errBox = document.getElementById("skinsError");
+  if (errBox) errBox.textContent = "";
+  try {
+    const imageBase64 = await readFileAsDataUrl(file);
+    const model = document.getElementById("skinModelSelect")?.value === "slim" ? "slim" : "classic";
+    await apiFetch("/api/skins/upload", { method: "POST", body: JSON.stringify({ type, imageBase64, model }) });
+    toastMsg(type === "cape" ? "Плащ загружен" : "Скин загружен");
+    refreshSkinPreview();
+  } catch (e) {
+    if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить файл.");
+  }
+}
+
+document.getElementById("skinUploadBtn")?.addEventListener("click", () => document.getElementById("skinFileInput")?.click());
+document.getElementById("capeUploadBtn")?.addEventListener("click", () => document.getElementById("capeFileInput")?.click());
+document.getElementById("skinFileInput")?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0]; if (file) uploadTexture("skin", file); e.target.value = "";
+});
+document.getElementById("capeFileInput")?.addEventListener("change", (e) => {
+  const file = e.target.files?.[0]; if (file) uploadTexture("cape", file); e.target.value = "";
+});
+document.getElementById("skinResetBtn")?.addEventListener("click", async () => {
+  try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "skin" }) }); toastMsg("Скин сброшен"); refreshSkinPreview(); }
+  catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось сбросить скин."); }
+});
+document.getElementById("capeDeleteBtn")?.addEventListener("click", async () => {
+  try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "cape" }) }); toastMsg("Плащ удалён"); refreshSkinPreview(); }
+  catch (e) { const b = document.getElementById("skinsError"); if (b) b.textContent = tr(e.message || "Не удалось удалить плащ."); }
+});
+document.getElementById("profileBioSave")?.addEventListener("click", async () => {
+  const bio = document.getElementById("profileBioInput")?.value || "";
+  try { await apiFetch("/api/profile/bio", { method: "POST", body: JSON.stringify({ bio }) }); toastMsg("Сохранено"); }
+  catch (e) { toastMsg(tr(e.message || "Не удалось сохранить.")); }
+});
 
 
 /* ===== Free client actions / safe initialization ===== */

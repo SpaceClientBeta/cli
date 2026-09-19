@@ -194,6 +194,48 @@
           <div class="activity-data-item"><span id="activityScreenLabel">РАЗРЕШЕНИЕ ЭКРАНА</span><strong id="profileActivityScreen">—</strong></div>
         </div>
       </div>
+      <div class="skins-panel">
+        <div class="skins-head">
+          <div class="tag">СКИН И ПЛАЩ</div>
+          <div class="skins-view-toggle">
+            <button type="button" id="skinView2D" class="view-toggle-btn active">2D</button>
+            <button type="button" id="skinView3D" class="view-toggle-btn">3D</button>
+          </div>
+        </div>
+        <div class="skins-body">
+          <div class="skin-viewer-wrap">
+            <canvas id="skinViewerCanvas" width="220" height="280" class="hidden"></canvas>
+            <img id="skin2dPreview" class="skin-2d-preview" alt="Скин" src="assets/favicon.svg">
+          </div>
+          <div class="skins-controls">
+            <label class="skin-field"><span>Модель рук</span>
+              <select id="skinModelSelect">
+                <option value="classic">Обычная (Steve)</option>
+                <option value="slim">Тонкая (Alex)</option>
+              </select>
+            </label>
+            <input type="file" id="skinFileInput" accept="image/png" class="hidden">
+            <input type="file" id="capeFileInput" accept="image/png" class="hidden">
+            <div class="skin-buttons-row">
+              <button type="button" id="skinUploadBtn" class="btn btn-dark">Загрузить скин</button>
+              <button type="button" id="skinResetBtn" class="btn btn-dark">Скин по умолчанию</button>
+            </div>
+            <div class="skin-buttons-row">
+              <button type="button" id="capeUploadBtn" class="btn btn-dark">Загрузить плащ</button>
+              <button type="button" id="capeDeleteBtn" class="btn btn-dark">Удалить плащ</button>
+            </div>
+            <div id="skinsError" class="form-error"></div>
+          </div>
+        </div>
+      </div>
+      <div class="profile-bio">
+        <span>О себе</span>
+        <textarea id="profileBioInput" maxlength="400" placeholder="Расскажи немного о себе..."></textarea>
+        <div class="profile-bio-row">
+          <span id="profilePlaytime" class="profile-playtime">Наиграно: —</span>
+          <button type="button" id="profileBioSave" class="btn btn-dark">Сохранить</button>
+        </div>
+      </div>
       <div class="cabinet-actions">
         <button id="cabinetChangePassword" class="btn btn-dark">Сменить пароль</button>
         <button id="cabinetLogout" class="btn btn-dark">Выйти из аккаунта</button>
@@ -438,8 +480,9 @@
   </div>
   <button id="ambientToggle" class="ambient-toggle" type="button" aria-label="Открыть управление музыкой" title="Музыка" aria-pressed="false">♫</button>
   <div id="ambientStatus" class="ambient-status" role="status" aria-live="polite"></div>
+  <script src="https://cdn.jsdelivr.net/npm/skinview3d@3.1.0/bundles/skinview3d.bundle.js"></script>
   <script src="download-config.js?v=2"></script>
-<script src="script.js?v=18.10"></script>
+<script src="script.js?v=18.11"></script>
 <script src="launcher-bridge.js?v=1"></script>
 <script>
 (function(){
