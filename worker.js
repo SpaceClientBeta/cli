@@ -1424,6 +1424,11 @@ function textureUrls(request, uuid, skinsRow) {
   const origin = new URL(request.url).origin;
   const stamp = skinsRow.updated_at ? new Date(skinsRow.updated_at).getTime() : 0;
   return {
+    // Если свой скин не загружен — отдаём null здесь (используется для
+    // отображения в лаунчере/на сайте, где есть собственный фолбэк на
+    // assets/skins/steve.png). Для самого Minecraft (handleYggProfile ниже)
+    // всегда подставляется настоящий URL на дефолтного Стива, чтобы игра не
+    // выбирала между Стивом/Алексом сама по хэшу UUID.
     skinUrl: skinsRow.skin_png ? `${origin}/textures/skin/${uuid}.png?v=${stamp}` : null,
     capeUrl: skinsRow.cape_png ? `${origin}/textures/cape/${uuid}.png?v=${stamp}` : null
   };
@@ -1605,23 +1610,28 @@ async function handleYggProfile(app, request, uuidParam, env) {
   const skins = await app.getSkins(account.email);
   const url = new URL(request.url);
   const unsigned = url.searchParams.get('unsigned') === 'true';
-  const properties = [];
-  if (skins.skin_png || skins.cape_png) {
-    const urls = textureUrls(request, dashed, skins);
-    const texturesPayload = {
-      timestamp: Date.now(),
-      profileId: uuid,
-      profileName: account.nick,
-      signatureRequired: !unsigned,
-      textures: {}
-    };
-    if (urls.skinUrl) texturesPayload.textures.SKIN = { url: urls.skinUrl, metadata: { model: skins.skin_model === 'slim' ? 'slim' : undefined } };
-    if (urls.capeUrl) texturesPayload.textures.CAPE = { url: urls.capeUrl };
-    const value = textToBase64(JSON.stringify(texturesPayload));
-    const prop = { name: 'textures', value };
-    if (!unsigned) prop.signature = await rsaSignBase64(env, value);
-    properties.push(prop);
-  }
+  const origin = url.origin;
+  const urls = textureUrls(request, dashed, skins);
+  const texturesPayload = {
+    timestamp: Date.now(),
+    profileId: uuid,
+    profileName: account.nick,
+    signatureRequired: !unsigned,
+    textures: {}
+  };
+  // Скин отдаём игре всегда: свой, если он загружен, иначе — дефолтный
+  // Стив (а не пусто и не Алекс). Раньше при отсутствии своего скина/плаща
+  // textures вообще не отправлялись, и сам Minecraft выбирал Стива/Алекса
+  // по хэшу UUID — из-за этого мог показываться Алекс вместо Стива.
+  texturesPayload.textures.SKIN = {
+    url: urls.skinUrl || `${origin}/assets/skins/steve.png`,
+    metadata: (urls.skinUrl && skins.skin_model === 'slim') ? { model: 'slim' } : undefined
+  };
+  if (urls.capeUrl) texturesPayload.textures.CAPE = { url: urls.capeUrl };
+  const value = textToBase64(JSON.stringify(texturesPayload));
+  const prop = { name: 'textures', value };
+  if (!unsigned) prop.signature = await rsaSignBase64(env, value);
+  const properties = [prop];
   return json(request, 200, { id: uuid, name: account.nick, properties });
 }
 

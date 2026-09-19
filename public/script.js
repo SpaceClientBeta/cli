@@ -1286,11 +1286,27 @@ function formatPlaytime(totalSeconds) {
 let skinViewer = null;
 let currentSkinMode = "2d";
 let lastSkinData = null;
-// Угол разворота модели "под наклоном" — как на референсе (лёгкий поворот
+// Угол разворота модели "под наклоном", лицом направо (лёгкий поворот
 // в 3/4, а не лицом строго вперёд). Используется и для 2D (статично), и как
-// стартовый угол для 3D (дальше уже крутит пользователь).
-const SKIN_POSE_ANGLE = -0.55;
+// стартовый угол для 3D (дальше уже крутит пользователь) — оба режима
+// стартуют с одного и того же угла, поэтому смотрят в одну сторону.
+const SKIN_POSE_ANGLE = 0.55;
 const DEFAULT_SKIN_URLS = { classic: "assets/skins/steve.png", slim: "assets/skins/alex.png" };
+// Плавная анимация "живого" скина: лёгкий поворот головы туда-сюда +
+// покачивание рук/плаща (как обычный Idle из skinview3d, но объединённое в
+// одну функцию — в подключённой версии skinview3d нет CompositeAnimation).
+function createLivelyAnimation() {
+  return new window.skinview3d.FunctionAnimation((player, progress) => {
+    const headT = progress * 1.1;
+    player.skin.head.rotation.y = Math.sin(headT) * 0.26;
+    player.skin.head.rotation.x = Math.sin(headT * 0.6) * 0.06;
+    const armT = progress * 2;
+    const basicArmRotationZ = Math.PI * 0.02;
+    player.skin.leftArm.rotation.z = Math.cos(armT) * 0.03 + basicArmRotationZ;
+    player.skin.rightArm.rotation.z = Math.cos(armT + Math.PI) * 0.03 - basicArmRotationZ;
+    player.cape.rotation.x = Math.sin(armT) * 0.01 + Math.PI * 0.06;
+  });
+}
 
 function loadProfileExtras(user) {
   const bioInput = document.getElementById("profileBioInput");
@@ -1318,11 +1334,12 @@ async function refreshSkinPreview() {
 function applySkinToViewers(skinUrl, capeUrl, model) {
   ensureSkinViewer();
   if (!skinViewer) return;
-  // Если свой скин не загружен — показываем настоящий скин Steve/Alex,
-  // а не иконку сайта: раньше при skinUrl=null подставлялась favicon.svg,
-  // из-за чего вместо человечка ничего не грузилось.
-  const url = skinUrl || DEFAULT_SKIN_URLS[model === "slim" ? "slim" : "classic"];
-  skinViewer.loadSkin(url, { model: model === "slim" ? "slim" : "default" });
+  // Если свой скин не загружен — всегда грузим настоящего Стива (а не
+  // Алекса и не иконку сайта): раньше при skinUrl=null подставлялась
+  // favicon.svg, а модель могла взять Алекса по сохранённому типу модели.
+  // Свой загруженный скин при этом всегда остаётся как есть.
+  const url = skinUrl || DEFAULT_SKIN_URLS.classic;
+  skinViewer.loadSkin(url, { model: skinUrl ? (model === "slim" ? "slim" : "default") : "default" });
   if (capeUrl) skinViewer.loadCape(capeUrl); else skinViewer.resetCape?.();
 }
 
@@ -1332,7 +1349,7 @@ function ensureSkinViewer() {
   if (!canvas) return;
   skinViewer = new window.skinview3d.SkinViewer({ canvas, width: 220, height: 280 });
   skinViewer.autoRotate = false;
-  skinViewer.animation = null;
+  skinViewer.animation = createLivelyAnimation();
   skinViewer.zoom = 0.9;
   applySkinPoseAngle();
   applySkinViewMode();
@@ -1373,7 +1390,7 @@ document.getElementById("skinSaveBtn")?.addEventListener("click", async () => {
   const model = document.getElementById("skinModelSelect")?.value === "slim" ? "slim" : "classic";
   try {
     await apiFetch("/api/skins/model", { method: "POST", body: JSON.stringify({ model }) });
-    toastMsg("Сохранено");
+    toastMsg("Успешно сохранено");
     refreshSkinPreview();
   } catch (e) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось сохранить.");
@@ -1421,7 +1438,7 @@ document.getElementById("capeDeleteBtn")?.addEventListener("click", async () => 
 });
 document.getElementById("profileBioSave")?.addEventListener("click", async () => {
   const bio = document.getElementById("profileBioInput")?.value || "";
-  try { await apiFetch("/api/profile/bio", { method: "POST", body: JSON.stringify({ bio }) }); toastMsg("Сохранено"); }
+  try { await apiFetch("/api/profile/bio", { method: "POST", body: JSON.stringify({ bio }) }); toastMsg("Успешно сохранено"); }
   catch (e) { toastMsg(tr(e.message || "Не удалось сохранить.")); }
 });
 
