@@ -1,6 +1,0 @@
-{
-  "$schema": "https://layero.ru/schema/layero-v2.json",
-  "installCommand": "npm install",
-  "nodeVersion": "22",
-  "startCommand": "node server.js"
-}
