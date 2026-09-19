@@ -1252,12 +1252,21 @@ async function openCabinet() {
     document.getElementById("profileEmail").textContent = user.email || "—";
     updateProfileActivity(user.lastSeen);
     cabinetModal.classList.remove("hidden", "cabinet-closing");
+    setCabinetTab("profile");
     updateAccount();
     loadProfileExtras(user);
   } catch (e) {
     clearSession(); updateAccount(); toastMsg(tr(e.message || "Не удалось загрузить профиль."));
   }
 }
+
+/* ===== Вкладки личного кабинета: Профиль / Скин ===== */
+function setCabinetTab(which) {
+  document.querySelectorAll("#cabinetTabs .tab").forEach((b) => b.classList.toggle("active", b.dataset.cabinetTab === which));
+  document.getElementById("cabinetTabProfile")?.classList.toggle("hidden", which !== "profile");
+  document.getElementById("cabinetTabSkin")?.classList.toggle("hidden", which !== "skin");
+}
+document.querySelectorAll("#cabinetTabs .tab").forEach((btn) => btn.addEventListener("click", () => setCabinetTab(btn.dataset.cabinetTab)));
 
 /* ===== Скины, плащ, "о себе", наигранное время ===== */
 

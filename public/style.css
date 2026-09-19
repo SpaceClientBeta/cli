@@ -1147,3 +1147,14 @@ body.launcher-mode .navbar{top:34px}
 .profile-bio-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .profile-playtime{font-size:11px;color:#a08fd1;font-weight:700}
 @media(max-width:560px){.skins-body{flex-direction:column;align-items:center}}
+/* Кабинет: внутренний скролл — раньше длинный контент (скины+профиль вместе)
+   обрезался модалкой (overflow:hidden) без возможности долистать. */
+.cabinet-window{max-height:min(88vh,900px);overflow-y:auto;overscroll-behavior:contain}
+.cabinet-window #cabinetTabs{margin-top:22px}
+.cabinet-tab-content.hidden{display:none!important}
+/* Кнопки управления скином/плащом — .btn-dark слишком блёклый на этом фоне
+   (сливался с панелью), нужен более заметный акцентный контур. */
+.skin-action-btn{background:rgba(151,110,255,.16)!important;border:1px solid rgba(151,110,255,.45)!important;color:#f2edff!important;font-weight:800!important}
+.skin-action-btn:hover{background:rgba(151,110,255,.27)!important;border-color:rgba(151,110,255,.7)!important;transform:translateY(-2px)}
+.skin-action-btn-danger{background:rgba(255,93,93,.14)!important;border-color:rgba(255,107,107,.45)!important;color:#ffd9d9!important}
+.skin-action-btn-danger:hover{background:rgba(255,93,93,.26)!important;border-color:rgba(255,107,107,.7)!important}
