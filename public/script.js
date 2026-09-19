@@ -1439,6 +1439,7 @@ async function uploadTexture(type, file) {
     const model = type === "skin" ? await detectSkinModel(imageBase64) : (lastSkinData?.model === "slim" ? "slim" : "classic");
     await apiFetch("/api/skins/upload", { method: "POST", body: JSON.stringify({ type, imageBase64, model }) });
     toastMsg("Успешно сохранено");
+    if (type === "skin" && lastSkinData) lastSkinData = { ...lastSkinData, hasSkin: true };
     refreshSkinPreview();
   } catch (e) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить файл.");
@@ -1465,13 +1466,43 @@ async function applyDefaultSkin(model) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось сохранить.");
   }
 }
+// Окно «Вы уверены?»: показывается, только если сейчас стоит СВОЙ загруженный скин
+// (он будет удалён). Если уже выбран Steve/Alex — меняем сразу, без вопросов.
+let skinConfirmResolve = null;
+function closeSkinConfirm(result) {
+  document.getElementById("skinConfirm")?.classList.remove("open");
+  const r = skinConfirmResolve; skinConfirmResolve = null;
+  if (r) r(result);
+}
+function confirmSkinDelete() {
+  const box = document.getElementById("skinConfirm");
+  if (!box) return Promise.resolve(true);
+  if (skinConfirmResolve) closeSkinConfirm(false);
+  return new Promise((resolve) => {
+    skinConfirmResolve = resolve;
+    box.classList.add("open");
+    document.getElementById("skinConfirmCancel")?.focus();
+  });
+}
+document.getElementById("skinConfirmCancel")?.addEventListener("click", () => closeSkinConfirm(false));
+document.getElementById("skinConfirmBg")?.addEventListener("click", () => closeSkinConfirm(false));
+document.getElementById("skinConfirmOk")?.addEventListener("click", () => closeSkinConfirm(true));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.getElementById("skinConfirm")?.classList.contains("open")) {
+    e.stopImmediatePropagation(); closeSkinConfirm(false);
+  }
+}, true);
+async function requestDefaultSkin(model) {
+  if (lastSkinData?.hasSkin && !(await confirmSkinDelete())) return;
+  applyDefaultSkin(model);
+}
 document.querySelectorAll(".default-skin-btn").forEach((btn) => {
-  btn.addEventListener("click", () => applyDefaultSkin(btn.dataset.defaultModel === "slim" ? "slim" : "classic"));
+  btn.addEventListener("click", () => requestDefaultSkin(btn.dataset.defaultModel === "slim" ? "slim" : "classic"));
 });
 // «Скин по умолчанию»: убирает свой скин; если уже стоял Alex — остаётся Alex, иначе Steve.
 document.getElementById("skinResetBtn")?.addEventListener("click", () => {
   const keepAlex = lastSkinData && !lastSkinData.hasSkin && lastSkinData.model === "slim";
-  applyDefaultSkin(keepAlex ? "slim" : "classic");
+  requestDefaultSkin(keepAlex ? "slim" : "classic");
 });
 document.getElementById("capeDeleteBtn")?.addEventListener("click", async () => {
   try { await apiFetch("/api/skins/reset", { method: "POST", body: JSON.stringify({ type: "cape" }) }); toastMsg("Успешно сохранено"); refreshSkinPreview(); }

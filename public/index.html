@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0a0710">
   <title>Space Client</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-  <link rel="stylesheet" href="style.css?v=18.20">
+  <link rel="stylesheet" href="style.css?v=18.21">
 </head>
 <body>
   <div class="stars"></div>
@@ -418,6 +418,19 @@
     </div>
   </div>
 
+  <div id="skinConfirm" class="skin-confirm" role="dialog" aria-modal="true" aria-labelledby="skinConfirmTitle">
+    <div class="skin-confirm-bg" id="skinConfirmBg"></div>
+    <div class="skin-confirm-window">
+      <div class="skin-confirm-icon">!</div>
+      <h3 id="skinConfirmTitle">Вы уверены, что хотите сменить скин?</h3>
+      <p class="skin-confirm-warn">Ваш загруженный скин будет удалён.</p>
+      <div class="skin-confirm-actions">
+        <button type="button" id="skinConfirmCancel" class="btn btn-dark">Отмена</button>
+        <button type="button" id="skinConfirmOk" class="btn skin-confirm-danger">Да, сменить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"><span class="toastCheck">✓</span><span id="toastText"></span></div>
   <script>
 (function(){
@@ -488,7 +501,7 @@
   <div id="ambientStatus" class="ambient-status" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/skinview3d@3.1.0/bundles/skinview3d.bundle.js"></script>
   <script src="download-config.js?v=2"></script>
-<script src="script.js?v=18.13"></script>
+<script src="script.js?v=18.14"></script>
 <script src="launcher-bridge.js?v=1"></script>
 <script>
 (function(){

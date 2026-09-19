@@ -1170,17 +1170,27 @@ body.launcher-mode .navbar{top:34px}
    отдельно, чтобы сохранить анимацию появления/исчезновения. */
 .hidden:not(.modal){display:none!important}
 
-/* ===== Скины по умолчанию: Steve (синий) / Alex (оранжево-зелёный) ===== */
+/* ===== Скины по умолчанию: выбранный — зелёный, второй — фиолетовый ===== */
 .default-skin-choice{display:flex;gap:10px}
-.default-skin-btn{flex:1;padding:13px 14px;border-radius:12px;border:1px solid;background:rgba(255,255,255,.03);cursor:pointer;font:800 14px 'Space Grotesk',sans-serif;letter-spacing:.3px;transition:background .2s ease,border-color .2s ease,transform .2s ease,box-shadow .2s ease}
-.default-skin-btn:hover{transform:translateY(-2px)}
-.default-skin-btn span{display:inline-block}
-.default-skin-steve{border-color:rgba(74,144,255,.4)}
-.default-skin-steve span{color:#5fa8ff}
-.default-skin-steve:hover,.default-skin-steve.active{background:rgba(74,144,255,.18);border-color:#4a90ff;box-shadow:0 0 0 3px rgba(74,144,255,.12)}
-.default-skin-alex{border-color:rgba(255,158,64,.42)}
-.default-skin-alex span{background:linear-gradient(90deg,#ff9a3c,#5fd35f);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
-.default-skin-alex:hover,.default-skin-alex.active{background:linear-gradient(135deg,rgba(255,150,60,.2),rgba(80,200,110,.2));border-color:#ffa24a;box-shadow:0 0 0 3px rgba(255,158,64,.12)}
+.default-skin-btn{flex:1;padding:13px 14px;border-radius:12px;border:1px solid rgba(151,110,255,.45);background:rgba(151,110,255,.14);cursor:pointer;font:800 14px 'Space Grotesk',sans-serif;letter-spacing:.3px;transition:background .2s ease,border-color .2s ease,transform .2s ease,box-shadow .2s ease}
+.default-skin-btn span{display:inline-block;color:#d9c9ff;transition:color .2s ease}
+.default-skin-btn:hover{transform:translateY(-2px);background:rgba(151,110,255,.26);border-color:rgba(151,110,255,.75)}
+.default-skin-btn.active,.default-skin-btn.active:hover{background:rgba(52,217,128,.18);border-color:#34d980;box-shadow:0 0 0 3px rgba(52,217,128,.12)}
+.default-skin-btn.active span{color:#c9f7dc}
+
+/* ===== Окно подтверждения: смена скина удаляет загруженный ===== */
+.skin-confirm{position:fixed;inset:0;z-index:10500!important;display:none;place-items:center;padding:16px}
+.skin-confirm.open{display:grid}
+.skin-confirm-bg{position:absolute;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px)}
+.skin-confirm-window{position:relative;width:min(400px,100%);padding:30px 28px 24px;border-radius:22px;background:linear-gradient(145deg,#15101d,#0d0912);border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 100px #000;text-align:center;animation:skinConfirmIn .28s cubic-bezier(.16,1,.3,1)}
+@keyframes skinConfirmIn{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+.skin-confirm-icon{width:46px;height:46px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;background:rgba(255,93,93,.14);border:1px solid rgba(255,107,107,.45);color:#ff7a7a;font:900 22px 'Space Grotesk',sans-serif}
+.skin-confirm-window h3{margin:0 0 10px;font:700 19px 'Space Grotesk',sans-serif;color:#fff}
+.skin-confirm-warn{margin:0 0 22px;color:#ff6b6b;font-size:13px;font-weight:700;line-height:1.5}
+.skin-confirm-actions{display:flex;gap:10px}
+.skin-confirm-actions .btn{flex:1}
+.skin-confirm-danger{background:rgba(255,93,93,.16)!important;border:1px solid rgba(255,107,107,.55)!important;color:#ffdada!important;font-weight:800!important}
+.skin-confirm-danger:hover{background:rgba(255,93,93,.3)!important}
 
 /* ===== Уведомление «Успешно сохранено»: как в лаунчере (зелёное), но у левого края экрана ===== */
 .toast{position:fixed!important;left:0!important;right:auto!important;top:auto!important;bottom:88px!important;z-index:20000!important;max-width:min(360px,calc(100vw - 20px));display:flex;align-items:center;gap:10px;padding:14px 22px 14px 16px;border:0;border-radius:0 14px 14px 0;background:linear-gradient(135deg,#1c8c50,#34d980);box-shadow:0 22px 60px rgba(0,0,0,.6);pointer-events:none;opacity:0;transform:translate3d(-110%,0,0);transition:opacity .3s ease,transform .4s cubic-bezier(.22,1,.36,1)}
