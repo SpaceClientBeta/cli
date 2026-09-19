@@ -648,7 +648,9 @@ let toastTimer = null;
 
 function toastMsg(message) {
   if (!toast) return;
-  toast.textContent = tr(String(message || ""));
+  const textEl = document.getElementById("toastText");
+  if (textEl) textEl.textContent = tr(String(message || ""));
+  else toast.textContent = tr(String(message || ""));
   toast.classList.remove("show");
   void toast.offsetWidth;
   toast.classList.add("show");
@@ -1283,6 +1285,12 @@ function formatPlaytime(totalSeconds) {
 
 let skinViewer = null;
 let currentSkinMode = "2d";
+let lastSkinData = null;
+// Угол разворота модели "под наклоном" — как на референсе (лёгкий поворот
+// в 3/4, а не лицом строго вперёд). Используется и для 2D (статично), и как
+// стартовый угол для 3D (дальше уже крутит пользователь).
+const SKIN_POSE_ANGLE = -0.55;
+const DEFAULT_SKIN_URLS = { classic: "assets/skins/steve.png", slim: "assets/skins/alex.png" };
 
 function loadProfileExtras(user) {
   const bioInput = document.getElementById("profileBioInput");
@@ -1297,25 +1305,25 @@ async function refreshSkinPreview() {
   if (errBox) errBox.textContent = "";
   try {
     const data = await apiFetch("/api/skins/me");
+    const model = data.model || "classic";
     const modelSelect = document.getElementById("skinModelSelect");
-    if (modelSelect) modelSelect.value = data.model || "classic";
-    applySkinToViewers(data.skinUrl, data.capeUrl, data.model || "classic");
+    if (modelSelect) modelSelect.value = model;
+    lastSkinData = data;
+    applySkinToViewers(data.skinUrl, data.capeUrl, model);
   } catch (e) {
     if (errBox) errBox.textContent = tr(e.message || "Не удалось загрузить скин.");
   }
 }
 
 function applySkinToViewers(skinUrl, capeUrl, model) {
-  const img2d = document.getElementById("skin2dPreview");
-  if (img2d) img2d.src = skinUrl || "assets/favicon.svg";
-  if (currentSkinMode === "3d" && window.skinview3d) {
-    ensureSkinViewer();
-    if (skinViewer) {
-      if (skinUrl) skinViewer.loadSkin(skinUrl, { model: model === "slim" ? "slim" : "default" });
-      else skinViewer.resetSkin?.();
-      if (capeUrl) skinViewer.loadCape(capeUrl); else skinViewer.resetCape?.();
-    }
-  }
+  ensureSkinViewer();
+  if (!skinViewer) return;
+  // Если свой скин не загружен — показываем настоящий скин Steve/Alex,
+  // а не иконку сайта: раньше при skinUrl=null подставлялась favicon.svg,
+  // из-за чего вместо человечка ничего не грузилось.
+  const url = skinUrl || DEFAULT_SKIN_URLS[model === "slim" ? "slim" : "classic"];
+  skinViewer.loadSkin(url, { model: model === "slim" ? "slim" : "default" });
+  if (capeUrl) skinViewer.loadCape(capeUrl); else skinViewer.resetCape?.();
 }
 
 function ensureSkinViewer() {
@@ -1324,21 +1332,53 @@ function ensureSkinViewer() {
   if (!canvas) return;
   skinViewer = new window.skinview3d.SkinViewer({ canvas, width: 220, height: 280 });
   skinViewer.autoRotate = false;
-  skinViewer.controls.enableZoom = true;
+  skinViewer.animation = null;
   skinViewer.zoom = 0.9;
-  if (window.skinview3d.WalkingAnimation) skinViewer.animation = new window.skinview3d.WalkingAnimation();
+  applySkinPoseAngle();
+  applySkinViewMode();
+}
+
+// Ставит модель в фиксированную позу "под наклоном" (3/4), а не лицом строго
+// на камеру — как в референсе.
+function applySkinPoseAngle() {
+  if (skinViewer?.playerObject) skinViewer.playerObject.rotation.y = SKIN_POSE_ANGLE;
+}
+
+// В 2D-режиме модель просто стоит в позе и не крутится (controls выключены).
+// В 3D — можно свободно вращать мышью/пальцем, стартуя с того же угла.
+function applySkinViewMode() {
+  if (!skinViewer) return;
+  const is3d = currentSkinMode === "3d";
+  skinViewer.controls.enableRotate = is3d;
+  skinViewer.controls.enableZoom = is3d;
+  skinViewer.controls.enablePan = false;
+  document.getElementById("skinViewerCanvas")?.classList.toggle("hidden", false);
+  document.querySelector(".skin-viewer-wrap")?.classList.toggle("locked", !is3d);
+  if (!is3d) applySkinPoseAngle();
 }
 
 function setSkinViewMode(mode) {
   currentSkinMode = mode;
   document.getElementById("skinView2D")?.classList.toggle("active", mode === "2d");
   document.getElementById("skinView3D")?.classList.toggle("active", mode === "3d");
-  document.getElementById("skin2dPreview")?.classList.toggle("hidden", mode !== "2d");
-  document.getElementById("skinViewerCanvas")?.classList.toggle("hidden", mode !== "3d");
-  if (mode === "3d") refreshSkinPreview();
+  ensureSkinViewer();
+  applySkinViewMode();
+  if (lastSkinData) applySkinToViewers(lastSkinData.skinUrl, lastSkinData.capeUrl, lastSkinData.model || "classic");
 }
 document.getElementById("skinView2D")?.addEventListener("click", () => setSkinViewMode("2d"));
 document.getElementById("skinView3D")?.addEventListener("click", () => setSkinViewMode("3d"));
+document.getElementById("skinSaveBtn")?.addEventListener("click", async () => {
+  const errBox = document.getElementById("skinsError");
+  if (errBox) errBox.textContent = "";
+  const model = document.getElementById("skinModelSelect")?.value === "slim" ? "slim" : "classic";
+  try {
+    await apiFetch("/api/skins/model", { method: "POST", body: JSON.stringify({ model }) });
+    toastMsg("Сохранено");
+    refreshSkinPreview();
+  } catch (e) {
+    if (errBox) errBox.textContent = tr(e.message || "Не удалось сохранить.");
+  }
+});
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {

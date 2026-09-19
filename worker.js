@@ -1469,6 +1469,19 @@ async function handleSkinsUpload(app, request) {
   return json(request, 200, { ok: true });
 }
 
+// Сохраняет только выбранную модель рук (classic/slim) без переливания
+// самой текстуры — нужно для кнопки "Сохранить" в кабинете, когда человек
+// просто переключил Steve/Alex, не загружая новый скин.
+async function handleSkinsModel(app, request) {
+  if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
+  const account = await app.requireUser();
+  if (!account) return json(request, 401, { message: 'Сессия истекла.' });
+  const body = await readBody(request);
+  const model = body.model === 'slim' ? 'slim' : 'classic';
+  await app.upsertSkins(account.email, { skin_model: model });
+  return json(request, 200, { ok: true, model });
+}
+
 async function handleSkinsReset(app, request) {
   if (!app.requireSupabase()) return json(request, 503, { message: 'Supabase не настроен.' });
   const account = await app.requireUser();
@@ -1693,6 +1706,7 @@ const ROUTES = [
   ['POST', '/api/profile/playtime', handleProfilePlaytime],
   ['GET', '/api/skins/me', handleSkinsGet],
   ['POST', '/api/skins/upload', handleSkinsUpload],
+  ['POST', '/api/skins/model', handleSkinsModel],
   ['POST', '/api/skins/reset', handleSkinsReset],
   ['POST', '/api/launcher/mc-auth', handleLauncherMcAuth],
   ['POST', '/yggdrasil/authserver/authenticate', handleYggAuthenticate],

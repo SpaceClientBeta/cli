@@ -48,9 +48,11 @@ footer{width:min(1120px,calc(100% - 32px));margin:auto;border-top:1px solid rgba
 @media(max-width:560px){.account-name{font-size:13px;max-width:130px}.nav-right{gap:6px}.delete-window{padding:27px}.delete-actions{flex-direction:column}.delete-actions .btn{width:100%}.cabinet-actions .btn-danger{margin-left:0}}
 
 /* Modern bottom-right notifications */
-.toast{left:auto;right:22px;bottom:22px;max-width:min(360px,calc(100% - 30px));padding:14px 17px 14px 18px;border-radius:16px;background:linear-gradient(145deg,rgba(27,21,35,.97),rgba(13,9,18,.97));border:1px solid rgba(151,110,255,.22);box-shadow:0 20px 65px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.025) inset;backdrop-filter:blur(18px);transform:translate3d(30px,18px,0) scale(.96);opacity:0;transition:opacity .35s ease,transform .45s cubic-bezier(.22,1,.36,1);}
+.toast{left:auto;right:22px;bottom:22px;max-width:min(360px,calc(100% - 30px));padding:14px 17px 14px 18px;display:flex;align-items:center;gap:11px;border-radius:16px;background:linear-gradient(145deg,rgba(27,21,35,.97),rgba(13,9,18,.97));border:1px solid rgba(151,110,255,.22);box-shadow:0 20px 65px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.025) inset;backdrop-filter:blur(18px);transform:translate3d(30px,18px,0) scale(.96);opacity:0;transition:opacity .35s ease,transform .45s cubic-bezier(.22,1,.36,1);}
 .toast:before{content:"";position:absolute;left:0;top:11px;bottom:11px;width:3px;border-radius:99px;background:linear-gradient(180deg,#9a6cff,#7045dc);box-shadow:0 0 18px rgba(137,93,255,.5)}
 .toast.show{transform:translate3d(0,0,0) scale(1);opacity:1}
+.toastCheck{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#1c8c50,#34d980);color:#fff;font-size:11px;font-weight:900;flex:0 0 auto;box-shadow:0 4px 14px rgba(52,217,128,.35)}
+#toastText{font-size:12px;font-weight:700;color:#f0ebf7}
 
 /* Smooth profile editing */
 .editable-profile{position:relative;padding-right:78px;transition:border-color .25s ease,background .25s ease,transform .25s ease}
@@ -1135,7 +1137,7 @@ body.launcher-mode .navbar{top:34px}
 .skin-viewer-wrap{width:220px;height:280px;border-radius:14px;background:radial-gradient(ellipse at 50% 20%,#8c5cff1a,transparent 70%),#0b0810;border:1px solid rgba(255,255,255,.08);display:grid;place-items:center;overflow:hidden;flex:0 0 auto}
 .skin-viewer-wrap canvas{width:100%;height:100%;cursor:grab}
 .skin-viewer-wrap canvas:active{cursor:grabbing}
-.skin-2d-preview{width:128px;height:128px;image-rendering:pixelated;filter:drop-shadow(0 10px 30px rgba(0,0,0,.4))}
+.skin-viewer-wrap.locked canvas{cursor:default}
 .skins-controls{flex:1;min-width:220px;display:flex;flex-direction:column;gap:12px}
 .skin-field{display:flex;flex-direction:column;gap:6px;font-size:11px;color:#8b8295}
 .skin-field select{padding:11px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(7,5,11,.78);color:#fff;outline:none}
@@ -1158,3 +1160,12 @@ body.launcher-mode .navbar{top:34px}
 .skin-action-btn:hover{background:rgba(151,110,255,.27)!important;border-color:rgba(151,110,255,.7)!important;transform:translateY(-2px)}
 .skin-action-btn-danger{background:rgba(255,93,93,.14)!important;border-color:rgba(255,107,107,.45)!important;color:#ffd9d9!important}
 .skin-action-btn-danger:hover{background:rgba(255,93,93,.26)!important;border-color:rgba(255,107,107,.7)!important}
+.skin-action-btn-primary{background:rgba(101,217,150,.16)!important;border:1px solid rgba(101,217,150,.5)!important;color:#dffbe8!important}
+.skin-action-btn-primary:hover{background:rgba(101,217,150,.28)!important;border-color:rgba(101,217,150,.75)!important}
+/* Общее правило для class="hidden": в разметке используется как основной способ
+   скрыть элементы (инпуты файлов, канвас/картинку скина и т.д.), но глобального
+   правила не было — из-за этого нативные <input type=file> оставались видимыми
+   белыми кнопками, а переключатель 2D/3D не мог по-настоящему скрыть неактивный
+   вид. Модалки (.modal) сюда не включены — они скрываются через opacity/visibility
+   отдельно, чтобы сохранить анимацию появления/исчезновения. */
+.hidden:not(.modal){display:none!important}

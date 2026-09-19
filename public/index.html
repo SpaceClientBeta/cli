@@ -199,14 +199,6 @@
           <div class="activity-data-item"><span id="activityScreenLabel">РАЗРЕШЕНИЕ ЭКРАНА</span><strong id="profileActivityScreen">—</strong></div>
         </div>
       </div>
-      <div class="profile-bio">
-        <span>О себе</span>
-        <textarea id="profileBioInput" maxlength="400" placeholder="Расскажи немного о себе..."></textarea>
-        <div class="profile-bio-row">
-          <span id="profilePlaytime" class="profile-playtime">Наиграно: —</span>
-          <button type="button" id="profileBioSave" class="btn btn-dark">Сохранить</button>
-        </div>
-      </div>
       <div class="cabinet-actions">
         <button id="cabinetChangePassword" class="btn btn-dark">Сменить пароль</button>
         <button id="cabinetLogout" class="btn btn-dark">Выйти из аккаунта</button>
@@ -224,8 +216,7 @@
         </div>
         <div class="skins-body">
           <div class="skin-viewer-wrap">
-            <canvas id="skinViewerCanvas" width="220" height="280" class="hidden"></canvas>
-            <img id="skin2dPreview" class="skin-2d-preview" alt="Скин" src="assets/favicon.svg">
+            <canvas id="skinViewerCanvas" width="220" height="280"></canvas>
           </div>
           <div class="skins-controls">
             <label class="skin-field"><span>Модель рук</span>
@@ -244,8 +235,19 @@
               <button type="button" id="capeUploadBtn" class="btn skin-action-btn">Загрузить плащ</button>
               <button type="button" id="capeDeleteBtn" class="btn skin-action-btn skin-action-btn-danger">Удалить плащ</button>
             </div>
+            <div class="skin-buttons-row">
+              <button type="button" id="skinSaveBtn" class="btn skin-action-btn skin-action-btn-primary">Сохранить</button>
+            </div>
             <div id="skinsError" class="form-error"></div>
           </div>
+        </div>
+      </div>
+      <div class="profile-bio">
+        <span>О себе</span>
+        <textarea id="profileBioInput" maxlength="400" placeholder="Расскажи немного о себе..."></textarea>
+        <div class="profile-bio-row">
+          <span id="profilePlaytime" class="profile-playtime">Наиграно: —</span>
+          <button type="button" id="profileBioSave" class="btn btn-dark">Сохранить</button>
         </div>
       </div>
       </div>
@@ -420,7 +422,7 @@
     </div>
   </div>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"><span class="toastCheck">✓</span><span id="toastText"></span></div>
   <script>
 (function(){
   const KEY="space_cookie_consent";
