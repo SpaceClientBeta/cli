@@ -1,0 +1,17 @@
+{
+  "name": "space-client-site",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "nodemailer": "^7.0.3",
+    "@supabase/supabase-js": "^2.57.0",
+    "bcryptjs": "^3.0.2",
+    "express": "^5.1.0"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
