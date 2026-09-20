@@ -1555,7 +1555,7 @@ async function handleYggRoot(app, request, env) {
       'feature.username_check': false
     },
     skinDomains: [host, `.${host}`],
-    signaturePublickey: String(env.RSA_PUBLIC_KEY || '').trim()
+    signaturePublicKey: String(env.RSA_PUBLIC_KEY || '').trim()
   });
 }
 
